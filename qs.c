@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static void _qs(int *a, int lo, int hi) 
+static void qs(int *a, int lo, int hi) 
 {
     if (hi > lo)
     {
@@ -14,21 +14,17 @@ static void _qs(int *a, int lo, int hi)
             if (l >= h) break;
             t=a[l]; a[l++]=a[h]; a[h--]=t;
         }
-        _qs(a, lo, h); 
-        _qs(a, h+1, hi);  
+        qs(a, lo, h); 
+        qs(a, h+1, hi);  
     }   
 }
-#define qs(array, size) _qs(array, 0, size-1)
 
 int main(int argc, char *argv[]) 
 {
-   int x;
-   int size=argc>1?atoi(argv[1]):10;
-   int array[size];
-
-   for (x = 0; x < size; x++) array[x]=random()&31;
-   for (x = 0; x < size; x++) printf("%d ",array[x]); printf("\n\n");
-   qs(array, size);
-   for (x = 0; x < size; x++) printf("%d ",array[x]); printf("\n");
+   int x, size=argc-1, array[size];
+   for (x = 0; x < size; x++) array[x]=atoi(argv[x+1]);
+   qs(array, 0, size-1);
+   for (x = 0; x < size; x++) printf("%d ",array[x]); 
+   printf("\n");
    return 0;
 }
