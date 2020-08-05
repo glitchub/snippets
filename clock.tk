@@ -1,0 +1,77 @@
+#!/usr/bin/env tclsh
+# show digital and analog clock with tcl/tk
+package require Tk
+
+# analog height/width
+set size 250
+
+# text point size
+set point 16
+
+# colors
+set fg "white"
+set bg "green"
+
+# determine average of fg and bg colors
+set aa "#"
+foreach f [winfo rgb . $fg] b [winfo rgb . $bg] { set aa [format "%s%2X" $aa [expr ($f+$b)/2 ]] }
+
+# Given a width and a draw command ending with "-fill" or "-outline", perform
+# it twice: once with the average color and width+.5, then with the fg color
+# and the true width. Not real anti-aliasing but better than nothing.
+proc antialias {width command} {
+    eval "$command $::aa -width [expr $width + .5]"
+    eval "$command $::fg -width $width"
+}
+
+# twiddle the window so it's not resizable
+wm title . "Clock"
+wm resizable . 0 0
+. configure -bg $bg
+
+# create frame with date and time
+# we use a monospace font
+frame .frame -bg $bg
+
+label .frame.date -textvar ::dates -font "TkFixedFont $point" -foreground $fg -background $bg
+pack .frame.date -side left
+
+label .frame.time -textvar ::times -font "TkFixedFont $point" -foreground $fg -background $bg
+pack .frame.time -side right
+
+pack .frame -fill x
+
+# create an analog clock face
+canvas .face -width $size -height $size -background $bg -borderwidth 0 -highlightthickness 0
+antialias 1 ".face create oval 1 1 [expr $size - 1] [expr $size - 1] -outline"
+
+set center [expr $size/2]
+
+# face goes under the frame
+pack .face
+
+# update the clock
+proc update {} {
+
+    set now [clock sec]
+    set ::dates [clock format $now -format "%Y-%m-%d "]
+    set ::times [clock format $now -format " %H:%M:%S"]
+
+    # seconds since midnight
+    set today [expr $now-[clock scan 0]]
+
+    # draw the analog clock hands
+    .face delete hands
+    set center [expr {$::size/2}]
+    foreach divisor {60.0 3600.0 43200.0} length {0.48 0.45 0.35} width {1 4 4} {
+        set radians [expr $today * 6.283185 / $divisor]
+        set x [expr $::size * $length * sin($radians)]
+        set y [expr $::size * $length * cos($radians)]
+        antialias $width ".face create line $::center $::center [expr $::center+$x] [expr $::center-$y] -tag hands -capstyle round -capstyle round -fill"
+    }
+
+    # repeat every second + 50mS
+    after [expr 1050-([clock milliseconds] % 1000)] update
+}
+# update now
+update
