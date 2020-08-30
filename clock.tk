@@ -14,7 +14,7 @@ set bg "green"
 
 # determine average of fg and bg colors
 set aa "#"
-foreach f [winfo rgb . $fg] b [winfo rgb . $bg] { set aa [format "%s%2X" $aa [expr ($f+$b)/2 ]] }
+foreach f [winfo rgb . $fg] b [winfo rgb . $bg] { set aa [format "%s%02X" $aa [expr (($f&0xff)+($b&0xff))/2 ]] }
 
 # Given a width and a draw command ending with "-fill" or "-outline", perform
 # it twice: once with the average color and width+.5, then with the fg color
