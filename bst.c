@@ -1,15 +1,7 @@
-// Binary search tree with auto-balancing
-
-#include <stdio.h>
+// Binary search tree. Define BALANCE to enable auto-balancing. This increases
+// code size and node insert/delete time but ensures O(logN) searches.
 #include <stdlib.h>
-#include <string.h>
 #include <stdbool.h>
-
-#define die(...) fprintf(stderr, __VA_ARGS__), exit(1)
-
-// Define to enable auto-balancing. This increases code size and node
-// insert/delete time but ensures O(logN) searches.
-#define BALANCE
 
 struct node
 {
@@ -80,17 +72,17 @@ static long long balance(struct node *n)
 // Insert key and value into tree.
 // If key already exists, just replace the value.
 // Note *value must either be NULL or malloced.
-// If counting then increment node counter on overwrite.
+// If counting then increment counter if key exists.
 static struct node *insert(struct node *n, long long key, void *value, bool counting)
 {
 #ifdef BALANCE
     int bal;
-#endif    
+#endif
 
     if (!n)
     {
         n = calloc(1,sizeof(struct node));
-        if (!n) die("OOM!\n");
+        if (!n) abort();
         n->key = key;
         n->value = value;
         n->counter = 1;
@@ -109,20 +101,20 @@ static struct node *insert(struct node *n, long long key, void *value, bool coun
     }
 
     if (key <= n->key)
-        n->left=insert(n->left, key, value, counting);
+        n->left = insert(n->left, key, value, counting);
     else
-        n->right=insert(n->right, key, value, counting);
+        n->right = insert(n->right, key, value, counting);
 
 #ifdef BALANCE
     // re-balance
-    n->height=height(n);
-    bal=balance(n);
+    n->height = height(n);
+    bal = balance(n);
     if (bal < -1)
     {
         if (key < n->left->key) return ror(n);
         if (key >= n->left->key)
         {
-            n->left=rol(n->left);
+            n->left = rol(n->left);
             return ror(n);
         }
     }
@@ -131,7 +123,7 @@ static struct node *insert(struct node *n, long long key, void *value, bool coun
         if (key > n->right->key) return rol(n);
         if (key <= n->right->key)
         {
-            n->right=ror(n->right);
+            n->right = ror(n->right);
             return rol(n);
         }
     }
@@ -150,14 +142,14 @@ struct node *delete(struct node *n, long long key, bool counting)
 
     if (!n) return NULL;
 
-    if (key < n->key) n->left=delete(n->left, key, counting);
-    else if (key > n->key) n->right=delete(n->right, key, counting);
+    if (key < n->key) n->left = delete(n->left, key, counting);
+    else if (key > n->key) n->right = delete(n->right, key, counting);
     else
     {
         // ok, delete this node
-        if (counting && --n->counter) return n; // maybe just decrement the count to 0  
+        if (counting && --n->counter) return n; // maybe just decrement the count to 0
 
-        if (n->value) free(n->value);  
+        if (n->value) free(n->value);
 
         if (!n->left && !n->right)
         {
@@ -182,14 +174,14 @@ struct node *delete(struct node *n, long long key, bool counting)
             n->value = successor->value;
             n->counter = successor->counter;
             // then delete the succcessor
-            successor->value=NULL;                    // there can only be one
-            n->right=delete(n->right, n->key, false); 
+            successor->value = NULL;                    // there can only be one
+            n->right = delete(n->right, n->key, false);
         }
     }
 
 #ifdef BALANCE
-    n->height=height(n);
-    bal=balance(n);
+    n->height = height(n);
+    bal = balance(n);
     if (bal < -1)
     {
         if (balance(n->left) <= 0) return ror(n);
@@ -200,7 +192,7 @@ struct node *delete(struct node *n, long long key, bool counting)
     if (bal > 1)
     {
         if (balance(n->right) >= 0) return rol(n);
-        n->right=ror(n->right);
+        n->right = ror(n->right);
         return rol(n);
     }
 #endif
@@ -220,21 +212,28 @@ struct node *search(struct node *n, long long key)
     return n;
 }
 
-#if 1
-// In this example the key is a hashed animal name and value is the animal's sound
-struct node *head=NULL;
+// To build the proof-of-concept:   CFLAGS=-DPOC make -B bst
+// To build the POC with balancing: CFLAGS="-DPOC -DBALANCE" make -B bst
+#ifdef POC
+#include <stdio.h>
+#include <string.h>
 
-// cheap and dirty string hash
+// Cheap and dirty string hash
 long long hash(char *key)
 {
-    long long h=0;
-    while (*key) h=(h*33)+*key++;
+    long long h = 0;
+    while (*key) h = (h * 33) + *key++;
     return h;
 }
 
+// All the animals live in a tree.
+struct node *tree = NULL;
+
+// If specified animal is in the tree report count, name, and sound.
+// Otherwise, "Animal is a myth".
 void say(char *animal)
 {
-    struct node *n = search(head, hash(animal));
+    struct node *n = search(tree, hash(animal));
     if (!n) printf("The %s is a myth.\n", animal);
     else if (!n->value)
     {
@@ -246,30 +245,42 @@ void say(char *animal)
         else printf("The %s says %s.\n", animal, (char *)n->value);
     }
 }
+
+// If animal not in tree, add it and set its sound (NULL is "quiet").
+// Otherwise add another animal, leave existing sound as is NULL is given
 void add(char *animal, char *sound)
 {
-    head=insert(head, hash(animal), sound ? strdup(sound) : NULL, true);
+    long long h = hash(animal);
+    struct node *n;
+    if (!sound && (n = search(tree, h)))
+        // sound is NULL and animal exists, just increment it
+        n -> counter++;
+    else
+        // else insert or update animal
+        tree = insert(tree, h, sound ? strdup(sound) : NULL, true);
     say(animal);
 }
 
+// Add animal if not in tree, or just replace its sound.
 void replace(char *animal, char *sound)
 {
-    head=insert(head, hash(animal), sound ? strdup(sound) : NULL, false);
+    tree = insert(tree, hash(animal), sound ? strdup(sound) : NULL, false);
     say(animal);
 }
 
+// Remove one of specified animal.
 void kill(char *animal)
 {
-    head=delete(head, hash(animal), true);
+    tree = delete(tree, hash(animal), true);
     say(animal);
 }
 
+// Remove all of specified animals.
 void extinct(char *animal)
 {
-    head=delete(head, hash(animal), false);
-    say(animal);
+    tree = delete(tree, hash(animal), false);
+    say(animal); // should always be "a myth"
 }
-
 
 void dump(struct node *n)
 {
@@ -285,45 +296,52 @@ void dump(struct node *n)
 
 int main(int argc , char *argv[])
 {
-    add("ox", "moo");                   // The ox says moo.
-    add("cat","meow");                  // The cat says meow.
-    add("cow","moo");                   // The cow says moo.
-    add("cow","moo");                   // 2 cows say moo.
-    add("cow","moo");                   // 3 cows say moo.
-    add("dog","bark");                  // The dog says bark.
-    add("bird","chirp");                // The bird says chirp.
-    add("lion","mew");                  // The lion says mew.
-    add("horse","neigh");               // The horse says neigh.
-    add("pig","oink");                  // The pig says oink.
-    add("rabbit",NULL);                 // The rabbit is quiet.
-    add("rabbit",NULL);                 // 2 rabbits are quiet.
-    replace("lion","roar");             // The lion says roar.
-    add("lion", "growl");               // 2 lions say growl.
-    say("unicorn");                     // The unicorn is a myth.
-    add("unicorn","tra-la tra-la");     // The unicorn says tra-la tra-la.
-    kill("cow");                        // 2 cows say moo.
-    kill("lion");                       // The lion says growl.
-    add("rabbit","I'M PETER DAMMIT");   // 3 rabbits say I'M PETER DAMMIT.
-    kill("rabbit");                     // 2 rabbits say I'M PETER DAMMIT.
-    kill("rabbit");                     // The rabbit says I'M PETER DAMMIT.
+    add("ox", "moo");                   // "The ox says moo."
+    add("cat","meow");                  // "The cat says meow."
+    add("cow","moo");                   // "The cow says moo."
+    add("cow",NULL);                     // "2 cows say moo."
+    add("cow",NULL);                    // "3 cows say moo."
+    add("dog","bark");                  // "The dog says bark."
+    add("bird","chirp");                // "The bird says chirp."
+    add("lion","mew");                  // "The lion says mew."
+    add("horse","neigh");               // "The horse says neigh."
+    add("pig","oink");                  // "The pig says oink."
+    add("rabbit",NULL);                 // "The rabbit is quiet."
+    add("rabbit",NULL);                 // "2 rabbits are quiet."
+    replace("lion","roar");             // "The lion says roar."
+    add("lion", NULL);                  // "2 lions say roar."
+    add("lion", "growl");               // "3 lions say growl."
+    replace("owl", "hoot");             // "The owl says hoot."
+    say("unicorn");                     // "The unicorn is a myth."
+    add("unicorn","tra-la tra-la");     // "The unicorn says tra-la tra-la."
+    kill("cow");                        // "2 cows say moo."
+    kill("lion");                       // "2 lions say growl."
+    add("rabbit","I'M PETER DAMMIT");   // "3 rabbits say I'M PETER DAMMIT."
+    kill("rabbit");                     // "2 rabbits say I'M PETER DAMMIT."
+    kill("rabbit");                     // "The rabbit says I'M PETER DAMMIT."
 
-    // Dump the tree, right-leaning if BALANCE not defined. 
-    dump(head);                                        
+    // Dump the tree, will be right-leaning if BALANCE not defined.
+    dump(tree);
 
-    kill("dog");
-    dump(head);
+    kill("dog");                        // The dog is a myth.
+    kill("owl");                        // The owl is a myth.
+    kill("owl");                        // The owl is a myth.
 
-    // See if we can make valgrind happy
-    kill("ox");
-    kill("cat");
-    extinct("cow");
-    kill("bird");
-    extinct("lion");
-    kill("horse");
-    kill("pig");
-    kill("unicorn");
-    kill("rabbit");
-    dump(head); // should be no output
+    dump(tree);
+
+    // Make valgrind happy
+    kill("ox");                         // "The ox is a myth."
+    kill("cat");                        // "The cat is a myth."
+    extinct("cow");                     // "The cow is a myth."
+    kill("bird");                       // "The bird is a myth."
+    extinct("lion");                    // "The lion is a myth."
+    kill("horse");                      // "The horse is a myth."
+    kill("pig");                        // "The pig is a myth."
+    kill("unicorn");                    // "The unicorn is a myth."
+    kill("rabbit");                     // "The rabbit is a myth."
+
+    dump(tree);                         // no output
+
     return 0;
 }
 #endif
