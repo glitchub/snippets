@@ -2,28 +2,42 @@
 
 # chr() and ord() functions in bash
 
-# Convert the value to an octal escape sequence, then evaluate the escape
-# sequence as a character.
-chr() { printf "$(printf '\\%03o' "$1")"; }
+# Convert value 0-255 to a character. The character can reliably be written to
+# a file (or stdout), but not all characters can be stored as strings (notably,
+# chr(0) and chr(10)).
+chr() { printf $(printf \\%03o $1); }
 
-# Leverage a magic printf hack, the string 'X with a single leading quote is
-# evaluated as the ordinal value of X. Works with gnu printf as well as the
-# bash builtin.
+# Convert a character to a value, this takes advantage of a little-known printf
+# trick.
 ord() { printf %d "'$1"; }
 
-set LC_ALL=C
+cat <<EOT
+Testing chr and ord for all values 0 to 255.
 
-# Convert 0 through 255 to characters, then dump as hex to show chr does not
-# introduce conversion errors
-for n in {0..255}; do
-    chr $n
-done | hexdump -e '16/1 "%02X " "\n"'
-echo
+The value 0 will trigger a bash runtime error but pass anyway, by accident.
 
-# Same as above, but convert the characters back to values with ord(). Note
-# printf will complain about NULL and other control characters, in general ord
-# should only be used with printable characters.
+The value 10 will fail because bash swallows the resulting LF.
+
+So the result should be "255/256 passed":
+
+EOT
+
+passed=0
 for n in {0..255}; do
-    printf "%02X " $(ord "$(chr $n)")
-done | fold -w48
+
+    # Convert to char and then feed through hexdump to capture the value of the
+    # resulting character.
+    c=$(chr $n | hexdump -e '1/1 "%u"')
+
+    # Convert to char and then back to ord. Note the argument to ord must be quoted!
+    o=$(ord "$(chr $n)")
+
+    # all three values should be the same
+    if ((n == c && n == o)); then
+        ((passed++))
+    else
+        echo "chr($n) produced character with value $c, ord(chr($n)) produced value $o"
+    fi
+done
 echo
+echo "$passed/256 passed"
