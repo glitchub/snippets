@@ -7,13 +7,14 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <sys/select.h>
+#include <unistd.h>
 
 #define die(...) fprintf(stderr, __VA_ARGS__), exit(1)
 
 #define IP "225.0.0.7"
 #define PORT 7777
 
-#define STDIN 0 
+#define STDIN 0
 #define STDOUT 1
 
 int main(int argc, char *argv[])
@@ -34,13 +35,13 @@ int main(int argc, char *argv[])
 
     // bind the port
     if (bind(sock,(struct sockaddr *)&sa, sizeof sa) < 0) die("bind failed: %s\n", strerror(errno));
-    
-    // enable socket for multicast receive  
+
+    // enable socket for multicast receive
     memset(&mreq,0,sizeof mreq);
     mreq.imr_multiaddr.s_addr=inet_addr(IP);
     mreq.imr_interface.s_addr=INADDR_ANY;
     if (setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof mreq)<0) die ("IP_ADDR_MEMBERSHIP failed: %s\n", strerror(errno));
-    
+
     // but don't receive our own multicast tx
     if (setsockopt(sock, IPPROTO_IP, IP_MULTICAST_LOOP, (int[]){0}, sizeof(int)) < 0) die("IP_MULTICAST_LOOP failed: %s\n", strerror(errno));
 
@@ -67,9 +68,8 @@ int main(int argc, char *argv[])
         {
             // copy rx socket to stdout
             ssize_t got=recvfrom(sock, buffer, sizeof buffer, 0, NULL, NULL);
-            if (got < 0) die("recvfrom failed: %s\n", strerror(errno));  
+            if (got < 0) die("recvfrom failed: %s\n", strerror(errno));
             if (write(STDOUT, buffer, got) <= 0)  die("write failed: %s\n", strerror(errno));
         }
     }
-}    
-
+}
