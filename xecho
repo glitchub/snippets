@@ -1,0 +1,36 @@
+#!/usr/bin/tclsh
+
+# Use instead shell "echo" for a script without a tty that's running under X.
+# Appears over all other windows, blocks until "OK" button is clicked.
+
+package require Tk
+
+set s [string map { "\\n" "\n" "\\t" "\t" "\\\\" "\\" } [join $argv " "]]
+
+# get screen size
+set width [winfo screenwidth .]
+set height [winfo screenheight .]
+
+# turn off decorations
+wm overrideredirect . 1
+
+# outline, etc
+. configure -relief raised -bd 2 -pady 5 -padx 5
+
+# add text
+if { $s != "" } {
+    label .l -text $s -justify left -wraplength [expr $width / 2]
+    pack .l -side left -padx {0 5}
+}
+
+# add OK
+button .b -text OK -command {exit}
+pack .b -side right
+
+# Update now so we can get the actual size, but the window will appear so we
+# first move it way offscreen
+wm geometry . -10000-10000
+update
+
+# move to the middle of the screen
+wm geometry . +[expr ($width-[winfo width .]) / 2]+[expr ($height-[winfo height .]) / 2]
