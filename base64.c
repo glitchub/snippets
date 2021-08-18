@@ -38,7 +38,8 @@ int main(int argc, char *argv[])
                 case 3: putchar(next | c); state = 0; break;
             }
         }
-    } else
+    }
+    else
     {
         // binary to base64: aaaaaaaa bbbbbbbb cccccccc -> aaaaaa aabbbb bbbbcc cccccc
         int state = 0, next, c;
@@ -46,23 +47,9 @@ int main(int argc, char *argv[])
         {
             switch(state)
             {
-                case 0:
-                    putchar(base64[c >> 2]);
-                    next = (c & 3) << 4;
-                    state = 1;
-                    break;
-
-                case 1:
-                    putchar(base64[next | c >> 4]);
-                    next = (c & 15) << 2;
-                    state = 2;
-                    break;
-
-                case 2:
-                    putchar(base64[next | c >> 6]);
-                    putchar(base64[c & 63]);
-                    state = 0;
-                    break;
+                case 0: putchar(base64[c >> 2]); next = (c & 3) << 4; state = 1; break;
+                case 1: putchar(base64[next | c >> 4]); next = (c & 15) << 2; state = 2; break;
+                case 2: putchar(base64[next | c >> 6]); putchar(base64[c & 63]); state = 0; break;
             }
         }
 

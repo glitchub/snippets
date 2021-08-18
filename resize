@@ -1,0 +1,40 @@
+#!/bin/sh
+
+# POSIX compliant script to query the invoking terminal for its current window
+# size and set the local tty size to match.
+
+# resize is used when logging into systems via serial console, which doesn't
+# provide the window size tracking inherent in telnet or ssh.
+
+# The terminal must support VT100/xterm-ish escape sequences:
+
+#   "\e7"         - save cursor position
+#   "\e[999;999H" - move cursor to lower right hand corner
+#   "\e[6n"       - return current cursor position
+#   "\e8"         - restore saved position
+
+# ("\e" indicates the escape character). The terminal must return the requested
+# cursor position in form "\e[rrr;ccc;R", where rrr and ccc are the 1-based row
+# and column values.
+
+# If you notice a one-second pause after issuing the command it means the
+# terminal did not return the expected sequence and the size was not set.
+
+# Note this script provides the same basic functionality as the resize
+# executable found in busybox, for example, so if you have that then you don't
+# need this.
+
+{
+    stty -icanon -echo min 0 time 10
+    (
+        cols=""
+        rows=""
+        getch() { c=$(dd bs=1 count=1 2>/dev/null); [ -z "$c" ] && exit; }
+        printf "\e7\e[999;999H\e[6n\e8"
+        while true; do getch; [ "$c" = "[" ] && break; done
+        while true; do getch; [ "$c" = ";" ] && break; rows="$rows$c"; done
+        while true; do getch; [ "$c" = "R" ] && break; cols="$cols$c"; done
+        stty cols $cols rows $rows
+    )
+    stty icanon echo min 1 time 0
+} <> /dev/tty
