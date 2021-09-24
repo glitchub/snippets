@@ -1,7 +1,8 @@
 #!/usr/bin/tclsh
 
-# Use instead shell "echo" for a script without a tty that's running under X.
-# Appears over all other windows, blocks until "OK" button is clicked.
+# Replacement for shell "echo" command that shows specified text in an X
+# dialog, above all other windows and blocks until "OK" button is clicked.
+# Multi-line strings are supported, if properly quoted.
 
 package require Tk
 
