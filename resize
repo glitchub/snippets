@@ -1,12 +1,20 @@
 #!/bin/sh
 
-# POSIX compliant script to query the invoking terminal for its current window
-# size and set the local tty size to match.
+# Query the controlling terminal for its current window size and set the tty
+# size to match.
 
-# resize is used when logging into systems via serial console, which doesn't
-# provide the window size tracking inherent in telnet or ssh.
+# This is required when logging into a system via serial console. It's not
+# usually needed with ssh and telnet because those protocols can track the
+# window size automatically.
 
-# The terminal must support VT100/xterm-ish escape sequences:
+# This script provides the same functionality as the resize executable, so
+# if you already have that then you don't need this.
+
+# This script attempts to be POSIX-compliant, but it requires a non-POSIX stty
+# executable that supports the 'cols' and 'rows' options (e.g. GNU or busybox).
+
+# The terminal must be attached to /dev/tty and support VT100/xterm-ish escape
+# sequences:
 
 #   "\e7"         - save cursor position
 #   "\e[999;999H" - move cursor to lower right hand corner
@@ -14,27 +22,29 @@
 #   "\e8"         - restore saved position
 
 # ("\e" indicates the escape character). The terminal must return the requested
-# cursor position in form "\e[rrr;ccc;R", where rrr and ccc are the 1-based row
+# cursor position in form "\e[rrr;cccR", where rrr and ccc are the 1-based row
 # and column values.
 
-# If you notice a one-second pause after issuing the command it means the
-# terminal did not return the expected sequence and the size was not set.
+# In normal operation resize should return immediately with no output. If
+# there's a one-second pause it means the terminal did not return the expected
+# sequence and the size was not set.
 
-# Note this script provides the same basic functionality as the resize
-# executable found in busybox, for example, so if you have that then you don't
-# need this.
+# You can use 'stty size' to test that the tty size was in fact set correctly.
+# If your shell is paying attention then 'echo $LINES $COLUMNS' should produce
+# the same thing, if not you'll ned to manualy set 'LINES=xxx COLUMNS=xxx'.
 
 {
+    save=$(stty -g)
     stty -icanon -echo min 0 time 10
     (
-        cols=""
         rows=""
-        getch() { c=$(dd bs=1 count=1 2>/dev/null); [ -z "$c" ] && exit; }
+        cols=""
+        getch() { c=$(dd bs=1 count=1 2>/dev/null); [ -z "$c" ] && exit; [ "$c" = "$1" ]; }
         printf "\e7\e[999;999H\e[6n\e8"
-        while true; do getch; [ "$c" = "[" ] && break; done
-        while true; do getch; [ "$c" = ";" ] && break; rows="$rows$c"; done
-        while true; do getch; [ "$c" = "R" ] && break; cols="$cols$c"; done
-        stty cols $cols rows $rows
+        until getch "["; do :; done
+        until getch ";"; do rows="$rows$c"; done
+        until getch "R"; do cols="$cols$c"; done
+        stty rows $rows cols $cols
     )
-    stty icanon echo min 1 time 0
+    stty $save
 } <> /dev/tty

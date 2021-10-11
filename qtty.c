@@ -184,7 +184,7 @@ int main(void)
 {
     int width = 80;
     struct winsize ws;
-    if (!ioctl(0, TIOCGWINSZ, &ws)) width = ws.ws_col;
+    if (!ioctl(1, TIOCGWINSZ, &ws)) width = ws.ws_col; // use width of console on stdout, or 80 if redirected.
 
     struct termios t;
     if (tcgetattr(0, &t)) die("Failed to get termios attributes for stdin.\n");
