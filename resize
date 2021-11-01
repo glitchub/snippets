@@ -31,7 +31,7 @@
 
 # You can use 'stty size' to test that the tty size was in fact set correctly.
 # If your shell is paying attention then 'echo $LINES $COLUMNS' should produce
-# the same thing, if not you'll ned to manualy set 'LINES=xxx COLUMNS=xxx'.
+# the same thing, if not you'll need to manually set 'LINES=xxx COLUMNS=xxx'.
 
 {
     save=$(stty -g)
