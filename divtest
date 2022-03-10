@@ -1,0 +1,76 @@
+#!/bin/bash -eu
+
+# Show the result of division and modulus for various tools or languages.
+# Numerator and divisor can be specified on the command line, defaults are -255
+# and 8.
+#
+# When signs are the same then all languages return the same results (except
+# that some languages intrinsically use floating point division).
+#
+# When the signs are different then things get more interesting, depending
+# mostly on whether the language uses floored or integer division.
+#
+# By default, expect this output:
+#     Building binaries, please wait...
+#
+#		 -255 / 8   -255 % 8
+#	       ---------- ----------
+#     awk         -31.875         -7
+#     bash            -31         -7
+#     bc              -31         -7
+#     c               -31         -7
+#     dc              -31         -7
+#     expr            -31         -7
+#     nodejs      -31.875         -7
+#     perl        -31.875          1
+#     python          -32          1
+#     python3     -31.875          1
+#     rust            -31         -7
+#     tcl             -32          1
+#
+# Note this script assumes that all the prerequisites are already installed,
+# and will rudely choke if not.
+
+# Set numerator and divisor from command line, default -255 and 8
+n=${1:--255}
+d=${2:-8}
+
+# scratch directory deleted at exit
+tmp=$(mktemp -d)
+trap 'rm -rf $tmp' EXIT
+
+# This may take a few seconds
+
+echo "Building binaries, please wait..."
+
+# compile a c program
+printf "%s\n" "#include <stdio.h>" "void main(void) {printf(\"%d %d\n\", $n/$d, $n%$d);}" | gcc -x c -o $tmp/c.out -
+
+# compile a rust program (statically linked, so it's gigantic)
+printf "%s\n" "fn main() { println!(\"{} {}\", $n/$d, $n%$d); }" | rustc -o $tmp/rust.out -
+
+echo
+
+# max column width
+W=$((${#d}+${#n}+5))
+
+# $W worth of dashes
+bar() { eval printf -- "-%.0s" {1..$W}; }
+
+# print formatted row
+row() { printf "%-7s %${W}s %${W}s\n" "$1" "${2::$W}" "${3::$W}"; }
+
+row ""      "$n / $d" "$n % $d"
+row ""      $(bar) $(bar)
+row awk     $(awk "BEGIN{print $n/$d, $n%$d; exit}")
+row bash    $((n / d)) $((n % d))
+row bc      $(bc <<<"$n/$d; $n%$d")
+row c       $($tmp/c.out)
+row dc      $(dc -e "${n//-/_} ${d//-/_} / p ${n//-/_} ${d//-/_} % p") # negative sign is '_'
+row expr    $(expr $n / $d) $(expr $n % $d)
+row nodejs  $(nodejs <<<"console.log($n/$d, $n%$d)")
+row perl    $(perl -e "print $n/$d, ' ', $n%$d")
+row python  $(python -c "print $n/$d, $n%$d")
+row python3 $(python3 -c "print($n/$d, $n%$d)")
+row rust    $($tmp/rust.out)
+row tcl     $(tclsh <<<"puts \"[expr $n / $d] [expr $n % $d]\"")
