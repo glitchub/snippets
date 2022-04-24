@@ -6,6 +6,7 @@
 #include <ctype.h>
 #include <sys/ioctl.h>
 #include <termios.h>
+#include <string.h>
 
 #define die(...) fprintf(stderr, __VA_ARGS__), exit(1)
 
@@ -134,26 +135,36 @@ struct flags cc[] =
     { 0 },
 };
 
-void putwrap(char *s, char *prefix, int width)
+// Given a header, and a string of arbitrary length, print the header and the string wrapped to specified width.
+// Subsequent lines are indented to the length of the header with whitespace and the last character of the header.
+void putwrap(const char *head, const char *text, int width)
 {
-    char *pf = "";
-    while(*s)
+    int hwidth = strlen(head);
+    int twidth = width - hwidth - 1;
+    if (twidth <= 0) return;
+    int lines = 0;
+
+    while(*text)
     {
-        char *p;
-        for (p = s; p - s < width - 1; p++)
-            if (!*p) { printf("%s%s\n", pf, s); return; }
-        for (; !isspace(*p); p--)
-            if (p == s) { p = s + width - 1; break; }
-        printf("%s%.*s\n", pf, (p - s) + 1, s);
-        s = p+1;
-        while (isspace(*s)) s++;
-        pf = prefix;
+        int idx = 0, len = 0;                                       // index, printable length
+        while(text[idx] && idx < twidth)
+        {
+            if (isspace(text[idx])) len = idx;                      // print to last whitespace
+            idx++;
+        }
+        if (!len || !text[idx] || isspace(text[idx])) len = idx;    // maybe print entire
+
+        printf("%*s %.*s\n", hwidth, lines++ ? (head + hwidth - 1) : head, len, text);
+
+        text += len;
+        while (isspace(*text)) text++;
     }
 }
 
 void showflags(char *name, struct flags *flags, void *value, int width)
 {
     int v;
+    char head[32];
 
     printf("%s:\n", name);
     for (; flags->name; flags++)
@@ -162,28 +173,28 @@ void showflags(char *name, struct flags *flags, void *value, int width)
         {
             case BIT:
                 // flag is tcflag_t single bit mask, display as "yes" or "no"
-                printf("  %-8s = %4s : ", flags->name, *(tcflag_t *)value & flags->flag ? "yes" : "no");
+                sprintf(head, "  %-8s = %4s :", flags->name, *(tcflag_t *)value & flags->flag ? "yes" : "no");
                 break;
             case VAL:
                 // flag is tcflag_t multiple-bit mask, display as numeric
-                printf("  %-8s = %4d : ", flags->name, *(tcflag_t *)value & flags->flag >> __builtin_ctz(flags->flag));
+                sprintf(head, "  %-8s = %4d :", flags->name, *(tcflag_t *)value & flags->flag >> __builtin_ctz(flags->flag));
                 break;
             case CHR:
                 // flag is cc_t index to a character, display as ^X or ASCII if possible, else numeric
                 v = *((cc_t *)value + flags->flag);
                 if (v > 0 && v < 32)
-                    printf("  %-8s =   ^%c : ", flags->name, v+64);
+                    sprintf(head, "  %-8s =   ^%c :", flags->name, v+64);
                 else if (v >= 32 && v <= 126)
-                    printf("  %-8s =  '%c' : ", flags->name, v);
+                    sprintf(head, "  %-8s =  '%c' :", flags->name, v);
                 else
-                    printf("  %-8s = %4d : ", flags->name, v);
+                    sprintf(head, "  %-8s = %4d :", flags->name, v);
                 break;
             case NUM:
                 // flag is cc_t index to a byte, display as numeric
-                printf("  %-8s = %4d : ", flags->name, *((cc_t *)value + flags->flag));
+                sprintf(head, "  %-8s = %4d :", flags->name, *((cc_t *)value + flags->flag));
                 break;
         }
-        putwrap(flags->description, "                  : ", width-20);
+        putwrap(head, flags->description, width);
     }
 }
 
@@ -191,7 +202,7 @@ int main(void)
 {
     int width = 80;
     struct winsize ws;
-    if (!ioctl(1, TIOCGWINSZ, &ws)) width = ws.ws_col; // use width of console on stdout, or 80 if redirected.
+    if (!ioctl(1, TIOCGWINSZ, &ws)) width = ws.ws_col-2; // use width of console on stdout, or 80 if redirected.
 
     struct termios t;
     if (tcgetattr(0, &t)) die("Failed to get termios attributes for stdin.\n");

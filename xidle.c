@@ -1,6 +1,6 @@
 // Report X display idle seconds, build with:
 //
-//   CFLAGS="-lX11 -lXss" make xidle
+//   LDFLAGS="-lX11 -lXss" make xidle
 
 #include <X11/extensions/scrnsaver.h>
 #include <stdio.h>
