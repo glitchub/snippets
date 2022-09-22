@@ -29,46 +29,54 @@ set -o pipefail
 die() { echo $* >&2; exit 1; }
 
 # Set numerator and divisor
-n=${1:--255}
-d=${2:-8}
-
+numerator=${1:--255}
+divisor=${2:-8}
 # sanity
-[[ $n =~ ^-?[0-9]+$ && $d =~ ^-?[0-9]+$ ]] || die "Must specify integers"
-(($d)) || die "Divisor cannot be 0"
+[[ $numerator =~ ^-?[0-9]+$ && $divisor =~ ^-?[0-9]+$ ]] || die "Must specify integers"
+(($divisor)) || die "Divisor cannot be 0"
+
+# true if $1 is executable
+can() { type -p $1 &>/dev/null; }
 
 # scratch directory, deleted at exit
 tmp=$(mktemp -d)
 trap 'rm -rf $tmp' EXIT
 
 # build C binary
-printf "%s\n" "#include <stdio.h>" "void main(void) {printf(\"%d %d\n\", $n/$d, $n%$d);}" | gcc -x c -o $tmp/c.out -
+can gcc && printf "%s\n" "#include <stdio.h>" "void main(void) {printf(\"%d %d\n\", $numerator/$divisor, $numerator%$divisor);}" | gcc -x c -o $tmp/c.out -
 
 # build rust binary
-printf "%s\n" "fn main() { println!(\"{} {}\", $n/$d, $n%$d); }" | rustc -o $tmp/rust.out -
+can rustc && printf "%s\n" "fn main() { println!(\"{} {}\", $numerator/$divisor, $numerator%$divisor); }" | rustc -o $tmp/rust.out -
 
 # max column width
-w=$((${#d} + ${#n} + 5))
+width=$((${#divisor} + ${#numerator} + 5))
 
-# $w worth of dashes
-bar() { eval printf -- "-%.0s" {1..$w}; }
+# $width worth of dashes
+bar() { eval printf -- "-%.0s" {1..$width}; }
 
 # print formatted row
-row() { printf "%-7s %${w}s %${w}s\n" "$1" "${2::$w}" "${3::$w}"; }
+row() { printf "%-7s %${width}s %${width}s\n" "$1" "${2::$width}" "${3::$width}"; }
 
+# if command is runnable return true, else print row placeholders and return false
+try() { can $1 && return 0; echo "??? ???"; false; }
+
+# heading
 echo
-row ""      "$n / $d" "$n % $d"
+row ""      "$numerator / $divisor" "$numerator % $divisor"
 row ""      $(bar) $(bar)
-row awk     $(awk "BEGIN{print $n/$d, $n%$d; exit}")
-row bash    $((n / d)) $((n % d))
-row bc      $(bc <<<"$n/$d; $n%$d")
-row c       $($tmp/c.out)
-row dc      $(dc -e "${n//-/_} ${d//-/_} / p ${n//-/_} ${d//-/_} % p") # negative sign is '_'
-row expr    $(expr $n / $d) $(expr $n % $d)
-row nodejs  $(nodejs <<<"console.log($n/$d, $n%$d)")
-row perl    $(perl -e "print $n/$d, ' ', $n%$d")
-row python2 $(python2 -c "print $n/$d, $n%$d")
-row python3 $(python3 -c "print($n/$d, $n%$d)")
-row rust    $($tmp/rust.out)
-row tcl     $(tclsh <<<"puts \"[expr $n / $d] [expr $n % $d]\"")
+
+# try each command of interest
+row awk     $(try awk           && awk "BEGIN{print $numerator/$divisor, $numerator%$divisor; exit}")
+row bash    $((numerator / divisor)) $((numerator % divisor))
+row bc      $(try bc            && bc <<<"$numerator/$divisor; $numerator%$divisor")
+row c       $(try $tmp/c.out    && $tmp/c.out)
+row dc      $(try dc            && dc -e "${numerator//-/_} ${divisor//-/_} / p ${numerator//-/_} ${divisor//-/_} % p") # dc requires '_' for a negative sign
+row expr    $(try expr          && expr $numerator / $divisor) $(expr $numerator % $divisor)
+row nodejs  $(try nodejs        && nodejs <<<"console.log($numerator/$divisor, $numerator%$divisor)")
+row perl    $(try perl          && perl -e "print $numerator/$divisor, ' ', $numerator%$divisor")
+row python2 $(try python2       && python2 -c "print $numerator/$divisor, $numerator%$divisor")
+row python3 $(try python3       && python3 -c "print($numerator/$divisor, $numerator%$divisor)")
+row rust    $(try $tmp/rust.out && $tmp/rust.out)
+row tcl     $(try tclsh         && tclsh <<<"puts \"[expr $numerator / $divisor] [expr $numerator % $divisor]\"")
 
 echo
