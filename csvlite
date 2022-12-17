@@ -1,0 +1,71 @@
+#!/bin/bash -u
+
+die() { echo "$@" >&2; exit 1; }
+
+usage() { die "\
+Usage:
+
+    csvlite [options] ['command' [...'command']] file.csv
+
+Perform sqlite3 commands against the specified csv file. The first line of the file is assumed to contain column
+names.
+
+Options are:
+
+    -o file  - write resulting csv to the specified file on exit
+    -t name  - name of generated sql table, default is 'csv'
+
+If commands are specified then they are executed in the order given, and any error will cause the script to terminate
+with an error.
+
+Otherwise an interactive shell is opened and abnormal exit is ignored.
+
+After the commands are executed or the shell is exited, 'file.csv' will be updated only if the database has changed.
+However if -o is given then the data is unconditionally written to the specified file instead. Use '-o /dev/null' to
+disable updates completely, '-o /dev/stdout' to write the result to the console, etc.
+
+Note that csv is a pure-text format, therefore all columns are treated as TEXT, there are no indexes or keys, and NULL
+fields are converted to empty strings.
+
+Example:
+    $ printf 'num,name\\n9,nine\\n10,ten\\n12,twelve\\n20,twenty\\n50,fifty\\n' > test.csv
+    $ ./csvlite '.headers on' '.mode column' 'select * from csv where cast(num as integer) >= 10 and name like \"tw%\"' test.csv
+    num         name
+    ----------  ----------
+    12          twelve
+    20          twenty
+";}
+
+set -o noglob
+
+out=
+table=csv
+while getopts ":o:t:" o; do case $o in
+    o) out=$OPTARG ;;
+    t) table=$OPTARG ;;
+    *) usage ;;
+esac; done
+shift $((OPTIND-1))
+
+(($#)) || usage
+commands=("${@:1:$#-1}")
+csvfile=${@:$#}
+[[ -s $csvfile ]] || die "No such file $csvfile"
+
+db=$(mktemp -t csvlite.XXXXXXXX)
+trap "rm -f $db" EXIT
+
+# read csv to database
+sqlite3=$(type -P sqlite3) || die "Need executable sqlite3"
+$sqlite3 -bail -csv $db ".import $csvfile $table" || die "Unable to import csv from $csvfile"
+[[ $out ]] || md5=$(md5sum $db)
+
+if [[ ${commands:-} ]]; then
+    # perform commands
+    $sqlite3 -bail $db "${commands[@]}" || die "sqlite3 command failed"
+else
+    # interactive, ignore error result
+    $sqlite3 $db -cmd '.prompt "csvlite> " "> "'
+fi
+
+[[ $out || $md5 != $(md5sum $db) ]] && $sqlite3 -csv $db/db ".headers on" "select * from $table" > ${out:-$file}
