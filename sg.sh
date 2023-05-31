@@ -4,7 +4,8 @@
 # This is highly dependent on how the kernel constructs sysfs. YMMV.
 get_scsi_generic()
 {
-    local sg=$(shopt -s globstar; set -- /sys/devices/**/scsi_generic/*/device/block/${1##*/}; set -f; IFS=/; set -- $1; echo /dev/${*: -4:1})
+    local sg=$(readlink /sys/block/${1##*/}/device/generic)
+    sg=/dev/${sg##*/}
     [[ -c "$sg" ]] && echo $sg
 }
 

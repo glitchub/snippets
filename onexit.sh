@@ -1,59 +1,38 @@
 #!/bin/bash
 
-# A stacked exit handler for bash.
+# Stacked exit handler for bash.
+trap '__=$?; set +$-; eval $onexit; exit $__' EXIT
 
-# onexit "command" - push command to the onexit stack, to be executed in reverse order of definition
-# when this script exits.
-onexit() { onexit=("$*" "${onexit[@]}"); }
-trap '__=$?; set +etu; eval "${onexit[@]/%/;}"; exit $__' EXIT
+# Define a command to be performed on exit. They are executed in reverse order of definition.
+onexit() { onexit="$*; ${onexit:-}"; }
 
-# popexit [N] - pop the last N commands from the onexit stack, or -N for all except for the first N.
-# Default 1. An arbitrarily large N pops them all.
-popexit() { onexit=("${onexit[@]: ${1:-1}}"); }
+# As above but only performed if exit status is non-zero.
+onerror() { onexit="((\$__))&&$*; ${onexit:-}"; }
 
-# dumpexit - dump the current onexit stack
-dumpexit() { printf "%s\n" "${onexit[@]}"; }
-
-# POC
+# POC, test with 'bash onexit.sh; echo $?'
 
 set -u
 
 onexit echo First in, last out
 
+onerror 'echo This only appears because the exit status is $__'
+
 # create a temp directory
 dir=$(mktemp -td onexit.poc.XXXX) || exit 1
 
-# test if the directory exists on exit (it should not)
+# Various exit commands, handled in reverse order! Quoting is only required if the command contains
+# shell meta-characters, or if you want to defer variable expansion until exit.
 onexit "[[ -d $dir ]] && echo 'Oops, $dir was not removed!' || echo '$dir has been removed'"
-
-# remove the directory on exit, this happens before the test above
 onexit rm -rf $dir
+onexit "echo $dir:; ls -al $dir"
+onexit cat $dir/tmpout
+onexit "echo This was redirected at exit >$dir/tmpout"
 
 # do stuff with the directory
 touch $dir/xyzzy || exit 1
 
-# show directory contents before removal
-onexit "echo $dir:; ls -al $dir"
-
-onexit A transient entry that will be popped
-onexit Another...
-popexit 2
-
 onexit echo Last in, first out
 
-onexit Another to be popped...
-onexit Another...
-onexit Another...
-onexit Another...
-onexit Another...
-onexit Another...
-# keep only the first 5
-popexit -5
-
-printf "These commands will run on exit:\n\n"
-
-dumpexit
-
-ex=$((RANDOM & 7))
-printf "\nExit status will be $ex. Bye!\n\n"
+ex=$((RANDOM & 3))
+printf "\nExiting with status $ex. Bye!\n\n"
 exit $ex
