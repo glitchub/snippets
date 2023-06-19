@@ -1,4 +1,5 @@
-// Return CRC8 of start crc and given data (polynomial is 0x07)
+// Return CRC-8 of start crc and given data, polynomial == 0x07
+// See https://reveng.sourceforge.io/crc-catalogue/1-15.htm#crc.cat.crc-8-smbus
 unsigned char crc8(unsigned char crc, unsigned char *data, int len)
 {
     static const unsigned char table[256] =
@@ -26,8 +27,8 @@ unsigned char crc8(unsigned char crc, unsigned char *data, int len)
 }
 
 // Print CRC8 of data on stdin. Example:
-//  $ echo This is a test | ./crc8
-//  CRC8 is 0x61
+//  $ echo -n 123456789 | ./crc8
+//  CRC8 is 0xF4
 #include <stdio.h>
 #include <unistd.h>
 int main(void)
@@ -35,7 +36,7 @@ int main(void)
     unsigned char data[64];     // size is arbitrary
     int len;
 
-    unsigned char crc = 0x00;   // start with 0x00 for CRC8 or 0x55 for CRC8-ITU
+    unsigned char crc = 0x00;
 
     while ((len = read(0, data, sizeof(data))) > 0) crc = crc8(crc, data, len);
 
