@@ -1,4 +1,4 @@
-// Create a text progress bar on stdout at the current cursor position, for C++
+// Create a text progress bar on stdout at the current cursor position.
 //
 // #include <unistd.h>
 // #include "progressbar.h"
@@ -73,6 +73,7 @@ class ProgressBar
     }
 
     void Fancy(bool _fancy) { if (!drawn) fancy = _fancy; }
+
     void Append(std::string _append) { append = _append; }
 
     void Draw()
