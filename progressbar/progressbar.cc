@@ -9,11 +9,11 @@ int main(int argc, char *argv[0])
 {
     int expected = (argc > 1) ? atoi(argv[1]) : 10; // anything greater than 1
 
-    ProgressBar bar(expected);
+    ProgressBar bar(expected, "Test: ");
 
     for (int x = 0; x < expected; x++)
     {
-        if (x) usleep(2000000/expected);
+        if (x) usleep(5000000/expected); // total time about 5 seconds
         bar.Update();
     }
 
