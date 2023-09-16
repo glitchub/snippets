@@ -1,60 +1,67 @@
-# Query the controlling terminal for its current window size and set the tty
-# size to match.
+# Query the controlling terminal for its current window size and set the tty size to match.
 
-# This is required when logging into a system via serial console. It's not
-# usually needed with ssh and telnet because those protocols can track the
-# window size automatically.
+# This is required when logging into a system via serial console. It's not usually needed with ssh
+# and telnet because those protocols can track the window size automatically.
 
-# This script provides the same functionality as the resize executable, so
-# if you already have that then you don't need this.
-
-# This script attempts to be POSIX-compliant, unless $BASH is set in which case
-# it uses various bash-isms. (For this reason there is no hash-bang at the top
-# and the script runs under whatever shell is used to launch it -- this is
-# purely for demonstration!)
-
-# In any case it requires a non-POSIX stty executable that supports the 'cols'
-# and 'rows' options (e.g. GNU or busybox).
-
-# The terminal must be attached to /dev/tty and support VT100/xterm-ish escape
-# sequences:
+# The terminal must be attached to /dev/tty and support VT100/xterm-ish escape sequences:
 
 #   "\e7"           - save cursor position
-#   "\e[9999;9999H" - move cursor to lower right hand corner
+#   "\e[999;999H"   - move cursor to lower right hand corner
 #   "\e[6n"         - return current cursor position
 #   "\e8"           - restore saved position
 
-# ("\e" indicates the escape character). The terminal must return the requested
-# cursor position in form "\e[rrr;cccR", where rrr and ccc are the 1-based row
-# and column values.
+# ("\e" indicates the escape character). The terminal must return the requested cursor position in
+# form "\e[rrr;cccR", where rrr and ccc are the 1-based row and column values.
 
-# In normal operation resize should return immediately with no output. If
-# there's a one-second pause it means the terminal did not return the expected
-# sequence and the size was not set.
+# Two resize functions are provided: a bash-specific version, and a POSIX-compliant version. Both
+# require a non-POSIX stty executable that supports the 'cols' and 'rows' options (e.g. GNU or
+# busybox).
 
-# Use 'stty size' to test that the tty size was in fact set correctly. If the
-# shell is paying attention then 'echo $LINES $COLUMNS' should produce the same
-# thing.
+# The functions return true if success, or false if stdin is not a tty, stty is the wrong version,
+# or the terminal failed to respond. In the latter case there may be a one-second delay before
+# return.
 
-{
-    if [ $BASH ]; then
-        echo "bash"
-        printf "\e7\e[9999;9999H\e[6n\e8"
-        IFS="[;" read -t1 -rsdR x r c && [[ $r && $c ]] && stty rows $r cols $c
-    else
-        echo "posix"
-        save=$(stty -g)
+# Run 'bash -f resize.sh' to test the bash version, or 'dash -f resize.sh' to test the posix version.
+
+if [ "$BASH" ]; then
+
+    echo "Testing bash resize"
+
+    resize()
+    {
+        [[ -t 0 ]] || return 1
+        printf "\e7\e[999;999H\e[6n\e8" >&0
+        IFS="[;" read -t1 -rsdR _ r c && stty rows $r cols $c 2>/dev/null
+    }
+
+else
+
+    echo "Testing posix resize"
+
+    resize()
+    {
+        [ -t 0 ] || return 1
+        local save=$(stty -g)
         stty -icanon -echo min 0 time 10
         (
             rows=""
             cols=""
             getch() { c=$(dd bs=1 count=1 2>/dev/null); [ -z "$c" ] && exit; [ "$c" = "$1" ]; }
-            printf "\e7\e[9999;9999H\e[6n\e8"
+            printf "\e7\e[999;999H\e[6n\e8" >&0
             until getch "["; do :; done
             until getch ";"; do rows="$rows$c"; done
             until getch "R"; do cols="$cols$c"; done
-            stty rows $rows cols $cols
+            stty rows $rows cols $cols 2>/dev/null
         )
+        local res=$?
         stty $save
-    fi
-} <> /dev/tty
+        return $res
+    }
+
+fi
+
+if resize; then
+    echo "Resized to $(stty size)"
+else
+    echo "Resize failed"
+fi
