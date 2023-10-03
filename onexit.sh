@@ -7,7 +7,7 @@ trap '__=$?; set +$-; eval $onexit; exit $__' EXIT
 onexit() { onexit="$*; ${onexit:-}"; }
 
 # As above but only performed if exit status is non-zero.
-onerror() { onexit="((\$__))&&$*; ${onexit:-}"; }
+onerror() { onexit="((\$__)) && { $*; }; ${onexit:-}"; }
 
 # POC, test with 'bash onexit.sh; echo $?'
 
@@ -15,7 +15,7 @@ set -u
 
 onexit echo First in, last out
 
-onerror 'echo This only appears because the exit status is $__'
+onerror 'echo This only appears because the exit status is $__; echo And also this!'
 
 # create a temp directory
 dir=$(mktemp -td onexit.poc.XXXX) || exit 1
