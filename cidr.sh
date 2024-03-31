@@ -15,6 +15,18 @@ cidr() {(
     fi
 )}
 
+# Given a valid CIDR and an IP, return true if both are in the same subnet
+reachable()
+{(
+    [[ $1 =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)/([0-9]+)$ ]] || exit 1
+    ip1=$(( 0x$(printf "%02X" ${BASH_REMATCH[*]:1:4}) ))
+    nm=$(((2 ** 32) - (2 ** (32 - ${BASH_REMATCH[5]}))))
+    [[ $2 =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || exit 1
+    ip2=$(( 0x$(printf "%02X" ${BASH_REMATCH[*]:1:4}) ))
+    (( (ip1 & nm) == (ip2 & nm) ))
+)}
+
+
 ################################################
 
 # Tests
@@ -23,7 +35,7 @@ set -u # complain about unset variables
 
 die() { echo $* >&2; exit 1; }
 
-testcases=(
+cidrtests=(
 
     # Each string has two or three words. The first is the expected output, or - if cidr() is
     # expected to fail, the second is the cidr argument string, the third is the optional default
@@ -48,7 +60,7 @@ testcases=(
     " -                  1.2.3.4//32     22 "
 )
 
-for testcase in "${testcases[@]}"; do
+for testcase in "${cidrtests[@]}"; do
     set -- $testcase
     if cidr=$(cidr ${*:2}); then
         if [[ $cidr != $1 ]]; then
@@ -58,6 +70,29 @@ for testcase in "${testcases[@]}"; do
     else
         [[ $1 == - ]] || die "Expected 'cidr ${*:2}' to return '$1' but it failed instead"
     fi
+done
+
+reachtests=(
+
+    # Each string has three words, the first is expected result 0 (true) or 1 (false), the second is
+    # a CIDRcidr, the this is an IP
+
+    # result           cidr            ip
+    " 0                1.1.1.1/24      1.1.1.255        "
+    " 1                1.1.1.1/24      1.1.2.1          "
+    " 1                1.1.1.1/24      invalid          "
+    " 1                1.1.1           1.1.1.1          "
+    " 0                1.1.1.1/0       255.255.255.255  "
+    " 0                1.1.1.1/0       0.0.0.0          "
+    " 0                1.1.1.1/32      1.1.1.1          "
+    " 1                1.1.1.1/32      1.1.1.2          "
+)
+
+for testcase in "${reachtests[@]}"; do
+    set -- $testcase
+    reachable $2 $3
+    res=$?
+    (( res == $1 )) || die "Expected 'reachable $2 $3' to return $1, but it returned $res instead"
 done
 
 echo "All tests passed"
