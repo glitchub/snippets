@@ -4,9 +4,10 @@
 # in reverse order of definition. "onerror" commands are only performed if exit status is non-zero.
 # Any arbitrary command pipeline is allowed but must not end with ";". Normal eval quoting rules
 # apply.
-trap '__exs=$?;trap debug;trap return;trap err;set +ueET;eval $__oxc' EXIT
+trap '__oxs=$?;trap - debug return err;set +ueET;eval $__oxc' EXIT
 onexit() { __oxc="$*;${__oxc:-}";}
-onerror() { onexit "((__exs))&&{ $*;}";}
+onerror() { onexit "((__oxs))&&{ $*;}";}
+trap "echo Abort; exit 130" int quit # make sure ^C and ^\ go through the exit handlers
 
 # The rest of this file is a test, run it with 'bash onexit.sh; echo $?'.
 
@@ -35,13 +36,14 @@ touch $dir/xyzzy || exit 1
 
 onexit echo Last in, first out
 
-(($#)) && ex=$1 || ex=$((RANDOM % 4))
+(($#)) && ex=$1 || ex=$((RANDOM % 5))
 
 # shellcheck disable=SC2154
 case $ex in
     0) printf "\n0 ---- Normal exit\n\n"; exit 0 ;;
     1) printf "\n1 ---- Abort due to -e\n\n"; false ;;
     2) printf "\n2 ---- Abort due to -u\n\n"; echo $nosuchvar ;;
+    3) printf "\b3 ---- Press ^C or ^\...\n\n"; sleep 1000d ;;
     *) printf "\n* ---- Error exit $ex\n\n"; exit $ex ;;
 esac
 echo "SHOULDN'T GET HERE"
