@@ -20,8 +20,7 @@ Example:\n\
   host=209.85.243.48\n\
   if ipv4in $host 64.233.160.0/19 66.102.0.0/20 108.177.8.0/21 209.85.128.0/17 216.58.192.0/19; then\n\
       echo \"$host belongs to google\"\n\
-  fi\n\
-\n"
+  fi\n"
 ;
 
 int netrange(char *cidr, uint32_t *ip, uint32_t *mask)
