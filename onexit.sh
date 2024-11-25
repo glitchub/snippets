@@ -2,57 +2,80 @@
 
 # Stacked exit handler for bash. Commands defined with "onexit" or "onerror" are performed at exit,
 # in reverse order of definition. "onerror" commands are only performed if exit status is non-zero.
-# "popexit [N]" removes the last N onexit or onerror definitions (default 1). Any arbitrary command
-# pipeline is allowed but must not end with ";". Normal eval quoting rules apply.
+# "popexit" removes the previous onexit or onerror definition. Any arbitrary command pipeline is
+# allowed but must not end with ";". Normal eval quoting rules apply.
 trap '__oxs=$?;trap - debug return err;set +ueET;eval ${__oxc[*]}' EXIT
 onexit() { __oxc=("$*;" "${__oxc[@]}");}
 onerror() { onexit "((__oxs))&&{ $*;}";}
-popexit() { __oxc=("${__oxc[@]:${1:-1}}");}
+popexit() { __oxc=("${__oxc[@]:1}");}
+trap 'echo $0: line $LINENO: unexpected error >&2' err # report unexpected errors
+set -ueE # exit on unexpected error or undefined var
+trap exit int # make sure ^C trips onerror
 
-trap "echo Abort; exit 130" int quit # make sure ^C and ^\ go through the exit handlers
+# Use 'bash onexit.sh' to run test cases, also illustrates weird "errexit" cases.
 
-# The rest of this file is a test, run it with 'bash onexit.sh; echo $?'.
+die() { echo $* >&2; exit 1; }
 
-set -ueE
+if ((!$#)); then
+    trap - int
 
-trap 'echo ERROR on line $LINENO' err
+    # Tests that should return 0
+    for ((n=0;n<20;n++)); do
+        echo Test case $n
+        bash $0 $n && xs=0 || xs=$?
+        echo Exit $xs
+        ((xs == 255)) && break
+        ((xs)) && die "Expected exit zero"
+        echo
+    done
+    echo
 
-onexit echo First in, last out.
-onexit 'false; echo FALSE=$?'
+    # Tests that should not return 0
+    for ((n=100;n<120;n++)); do
+        echo Test case $n
+        bash $0 $n && xs=1 || xs=$?
+        echo Exit $xs
+        ((xs == 255)) && break
+        ((xs)) || die "Expected exit non-zero"
+        echo
+    done
+    exit 0
+fi
 
-onerror 'echo This only appears because the exit status is non-zero; echo And also this!'
-onexit 'echo Flag=$-; nosuchcommand; test $nosuchvar; echo Ignore the errors above!'
+onexit echo First in, last out
+onerror echo Exit status is non-zero
+onexit echo Last in, first out
 
-# create a temp directory
-dir=$(mktemp -td onexit.poc.XXXX) || exit 1
+func1() { (exit 42); }
+func2() { return 42; }
 
-# Various exit commands, handled in reverse order!
-onexit "[[ -d $dir ]] && echo 'Oops, $dir was not removed!' || echo '$dir has been removed'"
-onexit rm -rf $dir
-onexit "echo Temp directory $dir:; ls -al $dir"
-onexit cat $dir/tmpout
-onexit "echo This was redirected at exit >$dir/tmpout"
+if (($1 < 100)); then
+    case $1 in
+        0) echo Normal exit ;;
+        1) echo Normal arithmetic non-zero; ((x=1)) ;;
+        2) echo Normal logic true; false || true ;;
+        2) echo Normal logic false; false && true ;;
+        3) echo Normal right-most pipeline; func2 | cat ;;
+        4) echo Normal ignored error; ! ((x=0)) ;;
+        *) popexit; popexit; exit 255 ;;
+    esac
+    # should always get here
+    exit 0
+fi
 
-# do stuff with the directory
-touch $dir/xyzzy || exit 1
-
-onexit 'echo "Last in, first out (if exit code 5)"'
-
-onexit echo This only appears because exit code is not 5
-onexit echo This only appears because the exit code is not 4 or 5
-
-(($#)) && ex=$1 || ex=$((RANDOM % 7))
-
-# shellcheck disable=SC2154
-case $ex in
-    0) printf "\n0 ---- Normal exit\n\n"; exit 0 ;;
-    1) printf "\n1 ---- Abort due to -e\n\n"; false ;;
-    2) printf "\n2 ---- Abort due to -u\n\n"; echo $nosuchvar ;;
-    3) printf "\n3 ---- Press ^C or ^\...\n\n"; sleep 1000d ;;
-    4) printf "\n4 ---- Pop last message\n\n"; popexit 1 ; exit $ex ;;
-    5) printf "\n5 ---- Pop last 2 messages\n\n"; popexit 2 ; exit $ex ;;
-    6) printf "\n6 ---- List handlers:\n"; printf ">  %s\n" "${__oxc[@]}"; printf "\n"; exit $ex ;;
-    *) printf "\n* ---- Error exit $ex\n\n"; exit $ex ;;
+case $(($1)) in
+    100) echo Error -e; false ;;
+    101) echo Error -u; echo $nosuchvar ;;
+    102) echo Error invalid command; nosuchcmd ;;
+    103) echo Error function; func1 ;;
+    104) echo Error function return; func2 ;;
+    105) echo Error arithmetic zero; ((x=0)) ;;
+    106) echo Error logic false; true && false ;;
+    107) echo Error logic false; false || false ;;
+    108) echo Error right-most pipeline; echo x | func2 ;;
+    109) echo Error pipefail; set -o pipefail; func2 | cat ;;
+    110) echo Press ^C or ^\\...; sleep 1000d ;;
+      *) popexit; popexit; exit 255 ;;
 esac
 echo "SHOULDN'T GET HERE"
-exit 99
+exit 255
