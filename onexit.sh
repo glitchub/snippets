@@ -4,23 +4,23 @@
 # in reverse order of definition. "onerror" commands are only performed if exit status is non-zero.
 # "popexit" removes the previous onexit or onerror definition. Any arbitrary command pipeline is
 # allowed but must not end with ";". Normal eval quoting rules apply.
-trap '__oxs=$?;trap - debug return err;set +ueET;eval ${__oxc[*]}' EXIT
-onexit() { __oxc=("$*;" "${__oxc[@]}");}
+trap '__oxs=$?;trap - debug return err;set +ueET;eval ${__oxc[*]}' exit
+onexit() { __oxc=("$*;" "${__oxc[@]:-}");}
 onerror() { onexit "((__oxs))&&{ $*;}";}
 popexit() { __oxc=("${__oxc[@]:1}");}
 trap 'echo $0: line $LINENO: unexpected error >&2' err # report unexpected errors
-set -ueE # exit on unexpected error or undefined var
+set -eEu # exit on unexpected error or undefined var
 trap exit int # make sure ^C trips onerror
 
-# Use 'bash onexit.sh' to run test cases, also illustrates weird "errexit" cases.
+# 'bash onexit.sh' runs the test cases, also illustrates unusual "errexit" behavior.
 
-die() { echo $* >&2; exit 1; }
+die() { echo "$*" >&2; exit 1; }
 
 if ((!$#)); then
     trap - int
 
     # Tests that should return 0
-    for ((n=0;n<20;n++)); do
+    for ((n = 0; n < 20; n++)); do
         echo Test case $n
         bash $0 $n && xs=0 || xs=$?
         echo Exit $xs
@@ -31,7 +31,7 @@ if ((!$#)); then
     echo
 
     # Tests that should not return 0
-    for ((n=100;n<120;n++)); do
+    for ((n = 100; n < 120; n++)); do
         echo Test case $n
         bash $0 $n && xs=1 || xs=$?
         echo Exit $xs
@@ -54,15 +54,16 @@ if (($1 < 100)); then
         0) echo Normal exit ;;
         1) echo Normal arithmetic non-zero; ((x=1)) ;;
         2) echo Normal logic true; false || true ;;
-        2) echo Normal logic false; false && true ;;
-        3) echo Normal right-most pipeline; func2 | cat ;;
-        4) echo Normal ignored error; ! ((x=0)) ;;
+        3) echo Normal logic false; false && true ;;
+        4) echo Normal right-most pipeline; func2 | cat ;;
+        5) echo Normal ignored error; ! ((x=0)) ;;
         *) popexit; popexit; exit 255 ;;
     esac
     # should always get here
     exit 0
 fi
 
+# shellcheck disable=2154,2034 # ignore nosuchvar and x
 case $(($1)) in
     100) echo Error -e; false ;;
     101) echo Error -u; echo $nosuchvar ;;
