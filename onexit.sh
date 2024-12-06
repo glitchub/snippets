@@ -4,7 +4,7 @@
 # in reverse order of definition. "onerror" commands are only performed if exit status is non-zero.
 # "popexit" removes the previous onexit or onerror definition. Any arbitrary command pipeline is
 # allowed but must not end with ";". Normal eval quoting rules apply.
-trap '__oxs=$?;trap - debug return err;set +ueET;eval ${__oxc[*]}' exit
+trap '__oxs=$?;trap "" int;trap - debug return err;set +ueET;eval ${__oxc[*]}' exit
 onexit() { __oxc=("$*;" "${__oxc[@]:-}");}
 onerror() { onexit "((__oxs))&&{ $*;}";}
 popexit() { __oxc=("${__oxc[@]:1}");}
@@ -57,7 +57,7 @@ if (($1 < 100)); then
         3) echo Normal logic false; false && true ;;
         4) echo Normal right-most pipeline; func2 | cat ;;
         5) echo Normal ignored error; ! ((x=0)) ;;
-        *) popexit; popexit; exit 255 ;;
+        *) echo The last \"normal\" case returns 255; popexit; popexit; exit 255 ;;
     esac
     # should always get here
     exit 0
@@ -75,8 +75,8 @@ case $(($1)) in
     107) echo Error logic false; false || false ;;
     108) echo Error right-most pipeline; echo x | func2 ;;
     109) echo Error pipefail; set -o pipefail; func2 | cat ;;
-    110) echo Press ^C or ^\\...; sleep 1000d ;;
-      *) popexit; popexit; exit 255 ;;
+    110) onerror "echo Sleeping, ^C shouldn\\'t work...; sleep 2; echo Continuing"; echo Press ^C or ^\\...; sleep 1000d ;;
+      *) echo The last \"error\" case returns 255; popexit; popexit; exit 255 ;;
 esac
 echo "SHOULDN'T GET HERE"
 exit 255
