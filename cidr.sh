@@ -1,4 +1,6 @@
-# Bash functions to valid CIDRs and expand network prefixes
+#!/bin/bash
+
+# Bash functions to validate CIDRs and expand network prefixes
 
 # Given a CIDR address in format w.x.y.z[/prefix], and an optional default network prefix, validate
 # and print normalized CIDR or return false. If /prefix is not specified, appends the default prefix
@@ -6,12 +8,12 @@
 cidr() {(
     [[ ${1:-} =~ ^0*([0-9]+)\.0*([0-9]+)\.0*([0-9]+)\.0*([0-9]+)(/0*([0-9]+))?$ ]] || exit 1
     d=${2:-32}
-    set -- ${BASH_REMATCH[*]:1:4} ${BASH_REMATCH[6]:-$d}
+    set -- "${BASH_REMATCH[@]:1:4}" "${BASH_REMATCH[6]:-$d}"
     (( $1<=255 && $2<=255 && $3<=255 && $4<=255 && $5<=32 )) || exit 1
     if ((d >= 0)); then
-        printf "%u.%u.%u.%u/%u" $*
+        printf "%u.%u.%u.%u/%u" "$@"
     else
-        printf "%u.%u.%u.%u" ${*:1:4}
+        printf "%u.%u.%u.%u" "${@:1:4}"
     fi
 )}
 
@@ -19,21 +21,21 @@ cidr() {(
 reachable()
 {(
     [[ $1 =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)/([0-9]+)$ ]] || exit 1
-    ip1=$(( 0x$(printf "%02X" ${BASH_REMATCH[*]:1:4}) ))
-    nm=$(((2 ** 32) - (2 ** (32 - ${BASH_REMATCH[5]}))))
+    ip1=$(( 0x$(printf "%02X" "${BASH_REMATCH[@]:1:4}") ))
+    nm=$(((2 ** 32) - (2 ** (32 - "${BASH_REMATCH[5]}"))))
     [[ $2 =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || exit 1
-    ip2=$(( 0x$(printf "%02X" ${BASH_REMATCH[*]:1:4}) ))
+    ip2=$(( 0x$(printf "%02X" "${BASH_REMATCH[@]:1:4}") ))
     (( (ip1 & nm) == (ip2 & nm) ))
 )}
 
 
 ################################################
 
-# Tests
+# Tests, run with "bash cidr.sh"
 
 set -u # complain about unset variables
 
-die() { echo $* >&2; exit 1; }
+die() { echo "$*" >&2; exit 1; }
 
 cidrtests=(
 
@@ -62,8 +64,8 @@ cidrtests=(
 
 for testcase in "${cidrtests[@]}"; do
     set -- $testcase
-    if cidr=$(cidr ${*:2}); then
-        if [[ $cidr != $1 ]]; then
+    if cidr=$(cidr "${@:2}"); then
+        if [[ $cidr != "$1" ]]; then
             [[ $1 == - ]] || die "Expected 'cidr ${*:2}' to return '$1' but got '$cidr' instead"
             die "Expected 'cidr ${*:2}' to fail but got '$cidr' instead"
         fi

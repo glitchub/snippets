@@ -1,34 +1,37 @@
 #!/bin/bash
 
-# Print number as fractional kibibytes, mebibytes, etc (powers of 2), ie 1048576 -> "2.00 MiB"
-# If given, second arg if given is number of signficant digits after the decimal, default 2
+# Print number as fractional kibibytes, mebibytes, etc (powers of 2) and return 0
+# EG 1048576 -> "1.00 MiB"
+# Optional second arg is number of digits after the decimal, default 2
+# Return 1 if arguments are invalid.
 bbytes() {
-    [[ $1 =~ [^0-9] ]] && { echo "$1"; return; }
-    local n=$((10#$1)) s=${2:-2}
-    ((n < 1024)) && { echo "$n bytes"; return; }
-    local d=$((2**50))
-    for m in PiB TiB GiB MiB KiB; do
-        ((n >= d)) && break
-        ((d /= 1024))
+    local num=$1 sig=${2:-2} div=$((2**50)) suf
+    [[ $num =~ ^(0|[1-9][0-9]*)$ && $sig =~ ^(0|[1-9][0-9]*)$ ]] || return 1
+    ((num < 1024)) && { echo "$num bytes"; return 0; }
+    for suf in PiB TiB GiB MiB KiB; do
+        ((num >= div)) && break
+        ((div /= 1024))
     done
-    # s is precision, 0 = no decimal
-    ((s)) && printf "%d.%0*d %s\n" "$((n/d))" "$s" "$(((n%d)*(10**s)/d))" "$m" || printf "%d %s\n" "$((n/d))" "$m";
+    ((sig)) && printf "%d.%0*d %s\n" "$((num/div))" "$sig" "$(((num%div)*(10**sig)/div))" "$suf" || printf "%d %s\n" "$((num/div))" "$suf"
+    return 0
 }
 
-# Print number as fractional kilobytes, megabytes, etc (powers of 10), ie 1000000 -> "2.00 MB"
-# If given, second arg if given is number of signficant digits after the decimal, default 2
+# Print number as fractional kilobytes, megabytes, etc (powers of 10) and return 0
+# EG 1000000 -> "1.00 MB"
+# Optional second arg is number of digits after the decimal, default 2
+# Return 1 if arguments are invalid.
 dbytes() {
-    [[ $1 =~ [^0-9] ]] && { echo "$1"; return; }
-    local n=$((10#$1)) s=${2:-2}
-    ((n < 1000)) && { echo "$n bytes"; return; }
-    local d=$((10**15))
-    for m in PB TB GB MB KB; do
-        ((n >= d)) && break
-        ((d /= 1000))
+    local num=$1 sig=${2:-2} div=$((10**15)) suf
+    [[ $num =~ ^(0|[1-9][0-9]*)$ && $sig =~ ^(0|[1-9][0-9]*)$ ]] || return 1
+    ((num < 1000)) && { echo "$num bytes"; return 0; }
+    for suf in PB TB GB MB KB; do
+        ((num >= div)) && break
+        ((div /= 1000))
     done
-    # s is precision, 0 = no decimal
-    ((s)) && printf "%d.%0*d %s\n" $((n/d)) $s $(((n%d)*(10**s)/d)) $m || printf "%d %s\n" $((n/d)) $m;
+    ((sig)) && printf "%d.%0*d %s\n" "$((num/div))" "$sig" "$(((num%div)*(10**sig)/div))" "$suf" || printf "%d %s\n" "$((num/div))" "$suf"
+    return 0
 }
 
-echo "bbytes: $(bbytes $1 $2)"
-echo "dbytes: $(dbytes $1 $2)"
+b=$(bbytes "$@") || { echo "Invalid"; exit; }
+echo "bbytes: $b"
+echo "dbytes: $(dbytes "$@")"
