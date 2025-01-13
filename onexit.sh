@@ -48,6 +48,15 @@ onexit echo Last in, first out
 
 func1() { (exit 42); }
 func2() { return 42; }
+func3() {
+    nosuchcmd;
+    echo "SHOULDN'T GET HERE"
+}
+func4() {
+    # shellcheck disable=2154
+    echo $nosuchvar;
+    echo "SHOULDN'T GET HERE"
+}
 
 if (($1 < 100)); then
     case $1 in
@@ -75,7 +84,9 @@ case $(($1)) in
     107) echo Error logic false; false || false ;;
     108) echo Error right-most pipeline; echo x | func2 ;;
     109) echo Error pipefail; set -o pipefail; func2 | cat ;;
-    110) onerror "echo Sleeping, ^C shouldn\\'t work...; sleep 2; echo Continuing"; echo Press ^C or ^\\...; sleep 1000d ;;
+    110) echo Error "invalid command in function"; func3 ;;
+    111) echo Error "-u in function"; func4 ;;
+    112) onerror "echo Sleeping, ^C shouldn\\'t work...; sleep 2; echo Continuing"; echo Press ^C or ^\\...; sleep 1000d ;;
       *) echo The last \"error\" case returns 255; popexit; popexit; exit 255 ;;
 esac
 echo "SHOULDN'T GET HERE"
