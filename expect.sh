@@ -4,9 +4,8 @@
 # In practice, this entire block is copied to your script or sourced from a separate file.
 
 {
-    # This block provides functions "spawn", "send", "expect", "close" which are roughly analogous
-    # to expect functions of the same name, as well as some supporting functions which are not. More
-    # information in the comments below.
+    # This provides expect functionality, including "spawn", "send", and "expect". More
+    # information in the "public functions" section below.
 
     # Private symbols start with "__", avoid direct reference.
 
@@ -17,109 +16,104 @@
     __start() {
         if ((!__started)); then
             local cp exp; coproc cp {
-                exec {exp}<<<"
-                    log_user 0; set stty_init {-opost -echo}
-                    proc enc {s} {binary encode base64 [encoding convertto utf-8 \$s]}; proc dec {s} {encoding convertfrom utf-8 [binary decode base64 \$s]}
-                    while {[gets stdin line] >= 0} {if [catch {eval \$line} err] {puts \"2 \$err\"}}
-                "
+                exec {exp}<<<"log_user 0; set stty_init {-opost -echo}
+                proc enc {s} {binary encode base64 [encoding convertto utf-8 \$s]}
+                proc dec {s} {encoding convertfrom utf-8 [binary decode base64 \$s]}
+                while {[gets stdin line] >= 0} {eval \$line}"
                 exec $__expect -f /dev/fd/$exp
             }
             exec {__cpout}<&"${cp[0]}" {__cpin}>&"${cp[1]}"; __started=1
         fi
     }
 
-    # Send stdin to the coprocess and get response to __reply. Dies if expect coprocess does.
-    __reply=""
+    # __cpio [options] tcl, send tcl to coproc, echo non-null response. Die on coprocess failure.
+    # -d: decode response, -t timeout: override 10
     __debio=0
     __cpio() {
-        local to=${1:-10} in rs
-        readarray -t in
-        ((__debio)) && echo ">>> ${in[*]}" >&2
-        echo "${in[*]}" >&${__cpin} || { echo "coproc write failed" >&2; exit 1; }
-        IFS= read -r -t $to rs  <&${__cpout} || { echo "coproc read failed" >&2; exit 1; }
-        ((__debio)) && echo "<<< $rs" >&2
-        __reply="${rs#* }"
-        return ${rs%% *}
+        local OPTARG OPTIND to=10 out=cat s
+        while getopts ":dt:" s; do case $s in d)out="__dec";; t)to=$OPTARG;; *);; esac; done
+        # shellcheck disable=2048 # compressing whitespace
+        s=$(set -f; echo ${*:$OPTIND}); ((__debio)) && echo ">>> $s" >&2
+        echo "$s" >&${__cpin} || { echo "coproc write failed" >&2; exit 1; }
+        read -r -t $to -u $__cpout s || { echo "coproc read failed" >&2; exit 1; }; ((__debio)) && echo "<<< $s" >&2
+        case $s in 0) return 0 ;; 0:*) $out <<< "${s:2}"; return 0 ;; 1*) return 1 ;; *) echo "coproc error"; exit 1 ;; esac
     }
 
-    __enc () { $__expect -c "
-            fconfigure stdin -translation binary
-            puts -nonewline [binary encode base64 [encoding convertto utf-8 [read -nonewline stdin]]]
-            flush stdout"
-    }
-    __dec () { $__expect -c "
-            fconfigure stdout -translation binary
-            puts -nonewline [encoding convertfrom utf-8 [binary decode base64 [read -nonewline stdin]]]
-            flush stdout"
+    __enc () {
+        $__expect -c "fconfigure stdin -translation binary
+                      puts -nonewline [binary encode base64 [encoding convertto utf-8 [read -nonewline stdin]]]
+                      flush stdout"
+     }
+
+    __dec () {
+        $__expect -c "fconfigure stdout -translation binary
+                      puts -nonewline [encoding convertfrom utf-8 [binary decode base64 [read -nonewline stdin]]]
+                      flush stdout"
     }
 
-    # "Public" functions, all return true if success and false if error.
+    # "Public" functions, all return true if success and false if error. These are roughly analogous to
+    # expect functions of the same name.
 
     # spawn program [args] - start specified program in the background
     spawn() {
-        __start
-        readarray -t args < <(for a; do printf "%s" "$a" | __enc; echo; done)
-        __cpio <<< "if [spawn -noecho {*}[lmap arg {${args[*]}} {dec \$arg}]] {puts 0} {puts 1}"
+        __start; local prog; readarray -t prog< <(for a; do printf "%s" "$a" | __enc; echo; done)
+        __cpio "if [catch {if [spawn -noecho {*}[lmap arg {${prog[*]}} {dec \$arg}]] {puts 0} {puts 1}} err] {puts \"1:\$err\"}"
     }
 
-    # Print the current spawn id (i.e. the id of the most recently spawned program). This is a
-    # string which can be passed to other functions.
-    spawnid() { __cpio <<< 'puts "0 $spawn_id"' && echo $__reply; }
+    # Print the current spawn id (the id of the most recently spawned program)
+    spawnid() { __cpio 'if [catch {puts "0:$spawn_id"} err] {puts 1:$err}'; }
 
-    # close [spawnid] - close the current or specified spawnid, which in theory will cause that process to
-    # exit. Reap child if possible.
-    # shellcheck disable=2120 # arg is optional
-    close() { __cpio <<< "catch {close ${1:+-i $1}}; wait -nowait ${1:+-i $1}; puts 0"; }
+    # close [options] - close the current spawnid, in theory this will cause the process to
+    # exit. Then reap the child if possible. Options:
+    #   -i spawnid : close the specified spawnid instead
+    close() {
+        local OPTARG OPTIND i=""; while getopts ":i:" o; do case $o in i) i="-i $OPTARG";; *);; esac; done
+        __cpio "catch {close $i}; catch {wait -nowait $i}; puts 0"
+    }
 
-    # send [spawnid] < text - write stdin to the current or specified spawnid
-    # shellcheck disable=2120 # arg is optional
-    send() { __cpio <<< "send ${1:+-i $1} [dec $(printf "%b" "$(cat)" | __enc)]; puts 0"; }
+    # send [options] text - write /text to the current spawnid. Whitespace is retained, escaped
+    # characters are expanded. Options:
+    #    -i spawnid : write to specified spawnid instead
+    send() {
+        local OPTARG OPTIND i="" s; while getopts ":i:" o; do case $o in i) i="-i $OPTARG";; *);; esac; done
+        s="${*:$OPTIND}"; __cpio "if [catch {send $i [dec $(__enc <<< ${s@E})]; puts 0} err] { puts \"1:\$err\" }"
+    }
 
-    # expect [timeout] [spawnid [ ...spawnid] --] regex [...regex]
-    # Given optional timeout in seconds, optional list of spawnids followed by --, and a list of
-    # regexes, wait for one of the regexes to match the output from the current or specified
-    # spawnids and print the associated regex index (0-based). Or print "timeout", or "eof" if
-    # a spawned process exits. If multiple regexes could match on the same character the lowest regex
-    # wins. Timeout is set from the first arg if numeric, otherwise defaults to 10. Regexes are made
-    # line-sensitive by default, unless they start with an ARE embedded option string. See
-    # https://www.tcl-lang.org/man/tcl/TclCmd/re_syntax.htm for more information on the ARE syntax.
+    # expect [options] regex [...regex]
+    # Given a list of regexes, wait for one to match the output from the current or specified
+    # spawnids and print the associated regex index (0-based). Or print "timeout", or "eof" if the
+    # spawned process exits.  If multiple regexes could match on the same character the lowest index
+    # wins. Options:
+    #   -g         : prevent ^, $, and . from matching "\n" (like grep)
+    #   -i spawnid : spawnid(s) to listen to, instead of the default (as a quoted string if multiple)
+    #   -t timeout : timeout seconds instead of 10
+    # See https://www.tcl-lang.org/man/tcl/TclCmd/re_syntax.htm for more information on the tcl ARE
+    # syntax.
     expect() {
-        local args=() cmd=() n=0 a to=10
-        [[ $1 =~ ^[1-9][0-9]*$ ]] && { to=$1; shift; }
-        for a; do
-            if ((!n)) && [[ $a == -- ]]; then cmd=("-i [list ${args[*]}]"); args=(); n=1; else args+=("$a"); fi
-        done
-        n=0
-        for a in "${args[@]}"; do
-            [[ $a =~ ^\(\?[[:alpha:]]+\) ]] || a="(?n)$a"
-            cmd+=("-regex [dec $(__enc <<< "$a")] {set result $((n++))}")
-        done
-        __cpio $((to+1)) <<<"
-            array unset expect_out; set matches 0;
-            expect -timeout $to ${cmd[*]} timeout {set result timeout} eof {set result eof};
-            set matches [llength [lsearch -all [array names expect_out] *string]];
-            puts \"0 \$result\"
-        " || return $?
-        echo $__reply
+        local OPTARG OPTIND cmd=() to="" n=0 p="" s
+        while getopts ":gi:t:" s; do case $s in g)p="(?n)";; i)cmd=("-i [list $OPTARG]");; t)to=$OPTARG;; *);; esac; done
+        shift $((OPTIND-1)); for s; do cmd+=("-regex [dec $(__enc <<< "$p$s")] {set result $((n++))}"); done
+        [[ $to =~ ^[1-9][0-9]*$ ]] || to=10 # valid or 10
+        __cpio -t $((to+1)) "if [catch {array unset expect_out; set matches 0; expect -timeout $to
+        ${cmd[*]} timeout {set result timeout} eof {set result eof}; set matches [llength [lsearch
+        -all [array names expect_out] *string]]; puts \"0:\$result\" } err] {puts \"1:\$err\"}"
     }
 
-    # match [n] - print nth match string from last expect, 0 for the match itself (default), otherwise the regex submatch.
-    # shellcheck disable=2120 # arg is optional
+    # match [n] - print nth match string from last expect, 0 for the match itself (default),
+    # otherwise the regex submatch.
     match() {
-        __cpio <<<"
-            if {${1:-0} < \$matches} {
-                puts \"0 [enc [string map {\"\r\n\" \"\n\" \"\n\r\" \"\n\" \"\r\" \"\n\"} \$expect_out(${1:-0},string)]]]\"
-            } {puts 1}
-        " || return $?
-        __dec <<< $__reply
+        local n=${1:-0}
+        __cpio -d "if {$n >= \$matches} {puts \"1:$n >= \$matches\" } elseif [catch {puts \"0:[enc
+        [string map {\"\r\n\" \"\n\" \"\n\r\" \"\n\" \"\r\" \"\n\"} \$expect_out($n,string)]]\" }
+        err] {puts \"1:\$err\"}"
     }
 
     # Print the spawnid that produced the match or eof from the last expect.
-    matchid() { __cpio <<< 'puts "0 [enc $expect_out(spawn_id)]"' || return $?; __dec <<< $__reply; }
+    matchid() { __cpio 'puts "0:$expect_out(spawn_id)"'; }
 
     # debug stuff
-    debre() { __start; __cpio <<< 'exp_internal 1; puts 0'; }                   # write regex processing debug to stderr
-    debsp() { __start; __cpio <<< 'log_file -a -leaveopen stderr; puts 0'; }    # write spawned process i/o to stderr
+    debre() { __start; __cpio 'exp_internal 1; puts 0'; }                   # write regex processing debug to stderr
+    debsp() { __start; __cpio 'log_file -a -leaveopen stderr; puts 0'; }    # write spawned process i/o to stderr
 }
 
 # Example/test: telnet to http hosts in parallel, send them all GET requests and scrape
@@ -128,7 +122,7 @@
 declare -A spawned # an array of [spawnid]=hostname
 
 # first telnet to all
-for h in chatgpt.com facebook.com google.com instagram.com reddit.com whatsapp.com x.com yahoo.com youtube.com ; do
+for h in facebook.com google.com instagram.com x.com youtube.com ; do
     if spawn telnet $h 80; then
         spawned[$(spawnid)]=$h
     else
@@ -139,17 +133,17 @@ done
 # wait for each to connect and send GET request
 eval "declare -A connecting=(${spawned[*]@K})" # dupe the array
 while [[ ${connecting[*]} ]]; do
-    r=$(expect ${!connecting[*]} -- 'Connected to')
+    r=$(expect -i "${!connecting[*]}" "Connected to") || exit 1
     case $r in
         0)  # connected
             m=$(matchid)
-            send $m <<< "GET / HTTP/1.0\r\r"
+            send -i $m "GET / HTTP/1.0\r\r"
             unset "connecting[$m]"
             ;;
         timeout)
             for i in "${!connecting[@]}"; do
                 echo "${connecting[$i]} failed to connect" >&2
-                close $i
+                close -i $i
                 unset "spawned[$i]"
             done
             break
@@ -157,7 +151,7 @@ while [[ ${connecting[*]} ]]; do
         eof)
             m=$(matchid)
             echo "Connection to ${connecting[$m]} dropped" >&2
-            close $m
+            close -i $m
             unset "connecting[$m]" "spawned[$m]"
             ;;
     esac
@@ -165,12 +159,12 @@ done
 
 # Wait for each to send "Date: xxx"
 while [[ ${spawned[*]} ]]; do
-    r=$(expect ${!spawned[*]} -- "^[Dd]ate:\s+(.+)")
+    r=$(expect -g -i "${!spawned[*]}" "^[Dd]ate:\s+(.+)") || exit 1
     case $r in
         0)  # matched
             m=$(matchid)
             printf "%-16s: %s\n" ${spawned[$m]} "$(match 1)"
-            close $m
+            close -i $m
             unset "spawned[$m]"
             ;;
         timeout)
@@ -180,7 +174,7 @@ while [[ ${spawned[*]} ]]; do
         eof)
             m=$(matchid)
             echo "Connection to ${spawned[$m]} dropped" >&2
-            close $m
+            close -i $m
             unset "spawned[$m]"
             ;;
     esac
