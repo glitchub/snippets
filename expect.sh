@@ -1,16 +1,16 @@
 #!/bin/bash
 
 {
-    # This provides expect functionality in bash, including "spawn", "send", and "expect". More
-    # information in the "public functions" section below.
+    # This block provides expect functionality in bash, including "spawn", "send", and "expect".
+    # More information in the "public functions" section below.
 
     # Private symbols start with "__", avoid direct reference.
 
     __expect=$(type -pf expect 2>/dev/null) || { echo "Requires executable 'expect'" >&2; exit 1; }
-
-    # __cpio [options] tcl, send tcl to coproc, echo non-null response. Die on coprocess failure.
-    # -d: decode response, -t timeout: override 10
-    __debio=0 __started=0 __cpout="" __cpin=""
+    __base64=$(type -pf base64 2>/dev/null) || { echo "Requires executable 'base64'" >&2; exit 1; }
+    __enc() { $__base64 -w0; }
+    __dec() { $__base64 -d; }
+    __started=0 __cpout=0 __cpin=0 __debio=0
     __cpio() {
         if ((!__started)); then
             coproc {
@@ -23,7 +23,8 @@
             __started=1
         fi
         local OPTARG OPTIND to=10 out=cat s
-        while getopts ":dt:" s; do case $s in d)out="__dec";; t)to=$OPTARG;; *);; esac; done
+        # -d = decode response, -t n = set timeout
+        while getopts ":dt:" s; do case $s in d)out="$__base64 -d";; t)to=$OPTARG;; *);; esac; done
         # shellcheck disable=2048 # compressing whitespace
         s=$(set -f; echo ${*:$OPTIND}); ((__debio)) && echo ">>> $s" >&2
         echo "$s" >&${__cpin} || { echo "coproc write failed" >&2; exit 1; }
@@ -31,24 +32,12 @@
         case $s in 0) return 0 ;; 0:*) $out <<< "${s:2}"; return 0 ;; 1*) return 1 ;; *) echo "coproc error"; exit 1 ;; esac
     }
 
-    __enc () {
-        $__expect -c 'fconfigure stdin -translation binary
-                      puts -nonewline [binary encode base64 [encoding convertto utf-8 [read -nonewline stdin]]]
-                      flush stdout'
-     }
-
-    __dec () {
-        $__expect -c 'fconfigure stdout -translation binary
-                      puts -nonewline [encoding convertfrom utf-8 [binary decode base64 [read -nonewline stdin]]]
-                      flush stdout'
-    }
-
-    # "Public" functions, all return true if success and false if error. These are roughly analogous to
+    # Public functions, all return true if success and false if error. These are roughly analogous to
     # expect functions of the same name.
 
     # spawn program [args] - start specified program in the background
     spawn() {
-        local prog; readarray -t prog< <(for a; do printf "%s" "$a" | __enc; echo; done)
+        local prog; readarray -t prog< <(for a; do printf "%s" "$a" | $__base64; echo; done)
         __cpio "if [spawn -noecho {*}[lmap arg {${prog[*]}} {dec \$arg}]] {puts 0} {puts 1}"
     }
 
@@ -68,7 +57,7 @@
     #    -i spawnid : write to specified spawnid instead
     send() {
         local OPTARG OPTIND i="" s; while getopts ":i:" o; do case $o in i) i="-i $OPTARG";; *);; esac; done
-        s="${*:$OPTIND}"; __cpio "send $i [dec $(__enc <<< ${s@E})]; puts 0"
+        s="${*:$OPTIND}"; __cpio "send $i [dec $($__base64 <<< ${s@E})]; puts 0"
     }
 
     # expect [options] regex [...regex]
@@ -84,7 +73,7 @@
     expect() {
         local OPTARG OPTIND cmd=() to="" n=0 p="" s
         while getopts ":gi:t:" s; do case $s in g)p="(?n)";; i)cmd=("-i [list $OPTARG]");; t)to=$OPTARG;; *);; esac; done
-        shift $((OPTIND-1)); for s; do cmd+=("-regex [dec $(__enc <<< "$p$s")] {set result $((n++))}"); done
+        shift $((OPTIND-1)); for s; do cmd+=("-regex [dec $(printf "%s" "$p$s" | __enc)] {set result $((n++))}"); done
         [[ $to =~ ^[1-9][0-9]*$ ]] || to=10 # valid or 10
         __cpio -t $((to+1)) "array unset expect_out; set matches 0;
                              expect -timeout $to ${cmd[*]} timeout {set result timeout} eof {set result eof};
@@ -105,8 +94,8 @@
     matchid() { __cpio 'puts "0:$expect_out(spawn_id)"'; }
 
     # debug stuff
-    debre() { __start; __cpio 'exp_internal 1; puts 0'; }                   # write regex processing debug to stderr
-    debsp() { __start; __cpio 'log_file -a -leaveopen stderr; puts 0'; }    # write spawned process i/o to stderr
+    debre() { __cpio 'exp_internal 1; puts 0'; }                   # show regex processing info on stderr
+    debsp() { __cpio 'log_file -a -leaveopen stderr; puts 0'; }    # show spawned process i/o on stderr
 }
 
 die() { echo "$*" >&2; exit 1; }
@@ -142,7 +131,7 @@ EOT
     exit 1
 }
 
-# In practice you copy the block above to your script or source it from a seperate file.
+# In practice you copy the block above to your script or source it from a separate file.
 
 # POC: telnet to http hosts in parallel, send them all GET requests and scrape the "Date:" from
 # their response headers.
