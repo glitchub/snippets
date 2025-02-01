@@ -24,7 +24,7 @@
         fi
         local OPTARG OPTIND to=10 out=cat s
         # -d = decode response, -t n = set timeout
-        while getopts ":dt:" s; do case $s in d)out="$__base64 -d";; t)to=$OPTARG;; *);; esac; done
+        while getopts ":dt:" s; do case $s in d)out="__dec";; t)to=$OPTARG;; *);; esac; done
         # shellcheck disable=2048 # compressing whitespace
         s=$(set -f; echo ${*:$OPTIND}); ((__debio)) && echo ">>> $s" >&2
         echo "$s" >&${__cpin} || { echo "coproc write failed" >&2; exit 1; }
@@ -37,7 +37,7 @@
 
     # spawn program [args] - start specified program in the background
     spawn() {
-        local prog; readarray -t prog< <(for a; do printf "%s" "$a" | $__base64; echo; done)
+        local prog; readarray -t prog< <(for a; do printf "%s" "$a" | __enc; echo; done)
         __cpio "if [spawn -noecho {*}[lmap arg {${prog[*]}} {dec \$arg}]] {puts 0} {puts 1}"
     }
 
@@ -57,7 +57,7 @@
     #    -i spawnid : write to specified spawnid instead
     send() {
         local OPTARG OPTIND i="" s; while getopts ":i:" o; do case $o in i) i="-i $OPTARG";; *);; esac; done
-        s="${*:$OPTIND}"; __cpio "send $i [dec $($__base64 <<< ${s@E})]; puts 0"
+        s="${*:$OPTIND}"; __cpio "send $i [dec $(printf "%s" "${s@E}" | __enc)]; puts 0"
     }
 
     # expect [options] regex [...regex]
@@ -93,9 +93,11 @@
     # Print the spawnid that produced the match or eof from the last expect.
     matchid() { __cpio 'puts "0:$expect_out(spawn_id)"'; }
 
-    # debug stuff
-    debre() { __cpio 'exp_internal 1; puts 0'; }                   # show regex processing info on stderr
-    debsp() { __cpio 'log_file -a -leaveopen stderr; puts 0'; }    # show spawned process i/o on stderr
+    # 1 = show regex processing info on stderr, 0 = turn it off
+    debre() { __cpio "exp_internal ${1:-1}; puts 0"; }
+
+    # 1  = show spawned process i/o on stderr, 0 = turn it off
+    debsp() { local s="log_file"; ((${1:-1})) && s+=";log_file -a -leaveopen stderr"; __cpio "$s; puts 0"; }
 }
 
 die() { echo "$*" >&2; exit 1; }
