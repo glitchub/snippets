@@ -100,39 +100,6 @@
     debsp() { local s="log_file"; ((${1:-1})) && s+=";log_file -a -leaveopen stderr"; __cpio "$s; puts 0"; }
 }
 
-die() { echo "$*" >&2; exit 1; }
-
-usage() {
-    cat <<EOT >&2
-Usage:
-
-    ${0##*/} [options]
-
-Telnet to the CPMs in a chassis and then repeatedly power cycle it, tracking the timing of the CPM boots.
-
-Options:
-
-    -a ip:port             - CPMA console
-    -b ip:port             - CPMB console
-    -g hostname            - gash server
-    -p ip[:port]/outlet    - Power controller telnet and outlet name, for use with pwrctrl
-    -t N                   - Set system type N (default 0)
-
--a is required.
-
-If -b is not provided then just tests boot time of the single CPM.
-
-If the CPMs are in a regression test bed then provide -g, the server must be accessible via ssh.
-
-Otherwise provide -p, the specified controller must be supported by the pwrctrl utility.
-
-Type 0 systems boot through the UEFI chain to grub.
-Type 1 systems boot through the EFI shell.
-
-EOT
-    exit 1
-}
-
 # In practice you copy the block above to your script or source it from a separate file.
 
 # POC: telnet to http hosts in parallel, send them all GET requests and scrape the "Date:" from
