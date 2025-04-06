@@ -48,7 +48,8 @@
     # exit. Then reap the child if possible. Options:
     #   -i spawnid : close the specified spawnid instead
     close() {
-        local OPTARG OPTIND i=""; while getopts ":i:" o; do case $o in i) i="-i $OPTARG";; *);; esac; done
+        local OPTARG OPTIND i=""
+        while getopts ":i:" o; do case $o in i) i="-i $OPTARG";; *);; esac; done
         __cpio "catch {close $i}; catch {wait -nowait $i}; puts 0"
     }
 
@@ -98,11 +99,13 @@
     # flush [options] - discard spawn output until idle for 1 second. Options:
     #  -i spawnid(s) : spawnid(s) to flush instead of default (can be given multiple times)
     #  -t timeout    : timeout seconds instead of 1
+    #  -n lines      : only flush specified number of lines
     # Return true on idle, false on eof.
     flush() {
-        local OPTARG ids="" to=1 o
-        while getopts ":i:t:" o; do case $o in i)ids+="$OPTARG ";; t)to=$OPTARG;; *);; esac; done
-        while true; do case $(expect -m ${ids:+-i "$ids"} -t $to ".+") in eof) return 1 ;; timeout) return 0 ;; esac; done
+        local OPTARG OPTIND ids="" to=1 lns=0 pat=".+" o
+        while getopts ":i:n:t:" o; do case $o in i)ids+="$OPTARG ";; n)lns=$OPTARG;; t)to=$OPTARG;; *);; esac; done
+        ((lns)) && pat=".*?\n"
+        while true; do case $(expect -m ${ids:+-i "$ids"} -t $to $pat) in eof) return 1 ;; timeout) return 0 ;; esac; ((!--lns)) && return 0; done
     }
 
     # show [options]
@@ -174,7 +177,7 @@ done
 
 # Wait for each to send "Date: xxx"
 while [[ ${spawned[*]} ]]; do
-    r=$(expect -i "${!spawned[*]}" "^[Dd]ate:\s+(.+)$") || exit 1
+    r=$(expect -i "${!spawned[*]}" "^[Dd]ate:\s+(.+?)\s*$") || exit 1
     case $r in
         0)  # matched
             i=$(matchid)
