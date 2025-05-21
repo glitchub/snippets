@@ -76,6 +76,7 @@
     expect() {
         local OPTARG OPTIND cmd=() ids="" to=10 m="(?n)" o n=0
         while getopts ":i:mt:" o; do case $o in i)ids+="$OPTARG ";; m)m="";; t)to=$OPTARG;; *);; esac; done
+        ((to <= 0)) && { echo "timeout"; return 1; }
         [[ $ids ]] && cmd+=("-i [list $ids]")
         shift $((OPTIND-1))
         for o; do cmd+=("-regex [dec $(printf "%s" "$m$o" | __enc)] {set result $((n++))}"); done
@@ -115,18 +116,22 @@
     #   -r  : show regex debug output
     #   -s  : show output from spawned processes (default if no other option is given)
     # shellcheck disable=2120 # args are optional
+    __shown=0
     show() {
-        local OPTARG OPTIND o what=0 flag
+        local OPTARG OPTIND o what=0
         while getopts ":adrs" o; do case $o in a)what=7;; d)((what|=1));; r)((what|=2));; s)((what|=4));; *);; esac; done
-        flag=${!OPTIND:-1}
-        if ((what & 1)); then __debio=$flag; fi
-        if ((what & 2)); then __cpio "exp_internal $flag; puts 0"; fi
-        if ((!what || what & 4)); then o="log_file"; ((flag)) && o+=";log_file -a -leaveopen stderr"; __cpio "$o; puts 0"; fi
+        ((what)) || what=4; o=$((what & ~__shown)); __shown=$((__shown | what))
+        ((o & 1)) && __debio=1; ((o & 2)) && __cpio "exp_internal 1; puts 0"; ((o & 4)) && __cpio "log_file -a -leaveopen stderr; puts 0"; true
     }
 
-    # noshow [options] - same as "show", but disable
+    # noshow [options] - Same as above, but disable. Default -a if none given.
     # shellcheck disable=2120 # args are optional
-    noshow() { show "$@" 0; }
+    noshow() {
+        local OPTARG OPTIND o what=0
+        while getopts ":adrs" o; do case $o in a)what=7;; d)((what|=1));; r)((what|=2));; s)((what|=4));; *);; esac; done
+        ((what)) || what=7; o=$((what & __shown)); __shown=$((__shown & ~what))
+        ((o & 1)) && __debio=0; ((o & 2)) && __cpio "exp_internal 0; puts 0"; ((o & 4)) && __cpio "log_file; puts 0"; true
+    }
 }
 
 # In practice you copy the block above to your script or source it from a separate file.
@@ -135,7 +140,8 @@
 # their response headers.
 
 set -ueE
-(($#)) && show "$*"
+trap 'die Error line $LINENO' err
+(($#)) && show "$@"
 
 declare -A spawned # an array of [spawnid]=hostname
 
@@ -197,3 +203,4 @@ while [[ ${spawned[*]} ]]; do
             ;;
     esac
 done
+noshow
