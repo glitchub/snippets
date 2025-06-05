@@ -1,6 +1,6 @@
-# N repstring [endstring]
-# print repstring N times, followed by endstring. The usual string escapes are supported.
-reps() { awk NF=$1+1 OFS="$2" ORS="${3:-}" <<< '' 2>/dev/null; }
+# reps N repstring
+# Print repstring N times, the usual string escapes are supported.
+reps() { awk NF=$1 O{F,R}S="$2" <<<''; }
 
 # Test:
 
@@ -10,7 +10,7 @@ reps() { awk NF=$1+1 OFS="$2" ORS="${3:-}" <<< '' 2>/dev/null; }
 # This is a test
 # This is a test
 
-# $ bash ./reps.sh 10 "hello" '!\n'
+# $ bash ./reps.sh 10 hello
 # hellohellohellohellohellohellohellohellohellohello
 
 reps "$@"
