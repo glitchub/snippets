@@ -34,6 +34,6 @@ int main(int argc, char **argv)
     if (verbose)
         printf("Display \"%s\" idle %ld days, %ld hours, %ld minutes, %.3f seconds\n", display_name, idle / msday, (idle % msday) / mshour, (idle % mshour) / msmin, (idle % msmin) / 1000.0);
     else
-        printf("Display \"%s\" idle %.3f seconds\n", display_name, idle / 1000.0);
+        printf("%ld\n", idle);
     return 0;
 }
