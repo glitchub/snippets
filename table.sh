@@ -22,7 +22,7 @@
 	    data+=" %$j${#t}s"
 	done
 	line+="-"
-	eval "function $name { ${head@A}; ${line@A}; ${data@A}; ((\$#)) && printf \"\$data\\n\" \"\${@}\" || printf \"%s\\n%s\\n\" \"\$head\" \"\$line\"; }"
+	eval "function $name { local ${head@A} ${line@A} ${data@A}; ((\$#)) && printf \"\$data\\n\" \"\${@}\" || printf \"%s\\n%s\\n\" \"\$head\" \"\$line\"; }"
     }
 }
 
