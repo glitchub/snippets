@@ -27,14 +27,16 @@
 }
 
 # Test output:
-#     left head   |   right head |   centered   | left data
-#    -------------+--------------+--------------+-----------
-#          data 1 |       data 2 |       data 3 | data 4
-#          more 1 |       more 2 |              | more 4
-#          last 1 |       last 2 |       last 3 |
+#     left head   |   right head |   center head   |   left data
+#    -------------+--------------+-----------------+-------------
+#          data 1 |       data 2 |          data 3 | data 4
+#          more 1 |       more 2 |                 | more 4
+#             one |              |                 |
+#          last 1 |       last 2 |          last 3 |
 
 # define the function
-table testable -4 "left head  " "  right head"  "  centered  "  "<left data"
+table testable -4 "left head  " "  right head"  "  center head  "  "<  left data"
+declare -f testable
 echo
 
 # write the head
@@ -42,7 +44,5 @@ testable
 # write lines of data
 testable "data 1" "data 2" "data 3"     "data 4"
 testable "more 1" "more 2" ""           "more 4"
+testable "one"
 testable "last 1" "last 2" "last 3"
-
-echo
-declare -f testable
