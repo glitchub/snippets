@@ -17,18 +17,13 @@ Usage:
         Reads a binary blob and converts it to string values using the rules given by the template.
         The values are written to stdout, one per line.
 
- The template is a sequence of characters that give the order and type of values, as follows:
+ The template is a sequence of characters that give the order and type of values, some of which are:
 
     a  A string with arbitrary binary data, will be null padded.
     A  A text (ASCII) string, will be space padded.
     Z  A null-terminated (ASCIZ) string, will be null padded.
-    b  A bit string (ascending bit order inside each byte, like vec()).
-    B  A bit string (descending bit order inside each byte).
-    h  A hex string (low nybble first).
-    H  A hex string (high nybble first).
     c  A signed char (8-bit) value.
     C  An unsigned char (octet) value.
-    W  An unsigned char value (can be greater than 255).
     s  A signed short (16-bit) value.
     S  An unsigned short value.
     l  A signed long (32-bit) value.
@@ -44,22 +39,10 @@ Usage:
     f  A single-precision float in native format.
     d  A double-precision float in native format.
     D  A float of long-double precision in native format.
-    p  A pointer to a null-terminated string.
-    P  A pointer to a structure (fixed-length string).
-    u  A uuencoded string.
-    U  A Unicode character number.
     x  A null byte (a.k.a ASCII NUL, "\000", chr(0))
-    X  Back up a byte.
-    @  Null-fill or truncate to absolute position, counted from the start of the innermost ()-group.
-    .  Null-fill or truncate to absolute position specified by the value.
-    (  Start of a ()-group.
 
-Each template character may be followed by !, <, or > modifier which may affect word length or
-endian-ness, depending on the character type.
-
-Each template character+modifer may be followed by a number indicating the repeat count, which
-represents either the number of values to be gobbled from the list, or the length of the singular
-item, depending on the character type.
+Each template character may be followed by a number which represents either the number of values to
+be gobbled from the list, or the length of the singular item, depending on the character type.
 
 This program simply exposes the perl pack and unpack functions in a manner suitable for shell
 scripting. See "perldoc -f pack" and "man perlpacktut" for *much* more information.
