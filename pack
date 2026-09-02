@@ -2,6 +2,7 @@
 use strict;
 use warnings;
 use Getopt::Std;
+use open ":std", ":encoding(UTF-8)";
 
 my $usage=<<'EOT';
 Usage:
@@ -50,6 +51,8 @@ EOT
 
 our %opts;
 getopts("u", \%opts) || die($usage);
+
+use open ":std", IO => ":raw";
 
 if ($opts{u} || $0 =~ /^(.*\/)?unpack$/)
 {

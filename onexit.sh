@@ -66,6 +66,7 @@ if (($1 < 100)); then
         3) echo Normal logic false; false && true ;;
         4) echo Normal right-most pipeline; func2 | cat ;;
         5) echo Normal ignored error; ! ((x=0)) ;;
+        6) echo Normal ignored status; ! false; ! true ;;
         *) echo The last \"normal\" case returns 255; popexit; popexit; exit 255 ;;
     esac
     # should always get here

@@ -29,9 +29,15 @@ if [ "$BASH" ]; then
 
     resize()
     {
-        [[ -t 0 ]] || return 1
-        printf "\e7\e[999;999H\e[6n\e8" >&0
-        IFS="[;" read -t1 -rsdR _ r c && stty rows $r cols $c 2>/dev/null
+        local save res rows cols
+        res=false
+        if save=$(stty -g 2>/dev/null); then
+            stty -echo
+            printf "\e7\e[999;999H\e[6n\e8" >&0
+            IFS="[;" read -t1 -r -dR _ rows cols && stty rows "$rows" cols "$cols" 2>/dev/null && res=true
+            stty $save
+        fi
+        $res
     }
 
 else
@@ -40,22 +46,21 @@ else
 
     resize()
     {
-        [ -t 0 ] || return 1
-        local save=$(stty -g)
-        stty -icanon -echo min 0 time 10
-        (
-            rows=""
-            cols=""
-            getch() { c=$(dd bs=1 count=1 2>/dev/null); [ -z "$c" ] && exit; [ "$c" = "$1" ]; }
-            printf "\e7\e[999;999H\e[6n\e8" >&0
-            until getch "["; do :; done
-            until getch ";"; do rows="$rows$c"; done
-            until getch "R"; do cols="$cols$c"; done
-            stty rows $rows cols $cols 2>/dev/null
-        )
-        local res=$?
-        stty $save
-        return $res
+        res=false
+        if save=$(stty -g 2>/dev/null); then
+            stty -icanon -echo min 0 time 10
+            printf "\0337\033[999;999H\033[6n\0338" >&0
+            rsp=$(dd bs=10 count=1 2>/dev/null)
+            case $rsp in
+                *'['*';'*R)
+                    rows=${rsp%;*}; rows=${rows#*[}
+                    cols=${rsp#*;}; cols=${cols%R}
+                    stty rows "$rows" cols "$cols" 2>/dev/null && res=true
+                    ;;
+            esac
+            stty $save
+        fi
+        $res
     }
 
 fi
